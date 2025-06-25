@@ -31,7 +31,7 @@
       # makeBinaryWrapper
       pkg-config
       libxkbcommon
-    ] ++ lib.optionals (lib.systems.inspect.predicates.isLinux system) [
+    ] ++ lib.optionals (pkgs.stdenv.isLinux) [
       alsa-lib
       libudev-zero
     ];
