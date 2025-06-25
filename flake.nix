@@ -18,6 +18,7 @@
     supportedSystems = with flake-utils.lib.system; [
       x86_64-linux
       aarch64-linux
+      aarch64-darwin
     ];
   in flake-utils.lib.eachSystem supportedSystems (system: let
     pkgs = (import nixpkgs) {
@@ -30,6 +31,7 @@
       # makeBinaryWrapper
       pkg-config
       libxkbcommon
+    ] ++ lib.optionals (lib.systems.inspect.predicates.isLinux system) [
       alsa-lib
       libudev-zero
     ];
