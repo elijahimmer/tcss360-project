@@ -27,17 +27,30 @@
 
     naersk' = pkgs.callPackage naersk {};
 
-    buildInputs = with pkgs; [
-      # makeBinaryWrapper
+    buildInputs = with pkgs;
+      lib.optionals (pkgs.stdenv.isLinux) [
+        libxkbcommon
+        libudev-zero
+        vulkan-loader
+        xorg.libXcursor
+        xorg.libXi
+        xorg.libXrandr
+        alsa-lib
+      ];
+
+    nativeBuildInputs = with pkgs; [
       pkg-config
-      libxkbcommon
-    ] ++ lib.optionals (pkgs.stdenv.isLinux) [
-      alsa-lib
-      libudev-zero
     ];
-  in {
-    packages.default = naersk'.buildPackage {
-      inherit buildInputs;
+
+    all_deps = with pkgs; [
+      #cargo-flamegraph
+      #cargo-expand
+      cmake
+    ] ++ buildInputs ++ nativeBuildInputs;
+  in rec {
+    defaultPackage = packages.tcss360-project;
+    packages.tcss360-project = naersk'.buildPackage rec {
+      inherit buildInputs nativeBuildInputs;
       src = ./.;
       meta = with pkgs.lib; {
         description = "A project for TCSS 360.";
@@ -45,20 +58,18 @@
         license = licenses.mit;
         mainProgram = "tcss360-project";
       };
-
-      /*postInstall = ''
-        wrapProgram $out/bin/wlrs-bar \
-      '';*/
+      postInstall = ''
+        #cp -r assets $out/bin/
+      '';
+      cargoBuildOptions = x: x ++ [ "--no-default-features" ];
     };
 
     devShells.default = pkgs.mkShell {
-      buildInputs =
-        buildInputs
-        ++ (with pkgs; [
-          cargo
-          rustc
-          clippy
-        ]);
+      nativeBuildInputs = all_deps;
+      shellHook = ''
+        export CARGO_MANIFEST_DIR=$(pwd)
+        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath all_deps}"
+      '';
     };
 
     formatter = pkgs.alejandra;
