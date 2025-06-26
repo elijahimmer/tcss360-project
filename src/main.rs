@@ -1,35 +1,70 @@
 use bevy::prelude::*;
 
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::sprite::{Wireframe2dConfig, Wireframe2dPlugin};
+
 fn main() {
     App::new()
-        .add_systems(Startup, add_people)
-        .add_systems(Update, (update_people, greet_people).chain())
+        .add_plugins((
+            DefaultPlugins,
+
+            #[cfg(not(target_arch = "wasm32"))]
+            Wireframe2dPlugin::default(),
+        ))
+        .add_systems(Startup, setup)
+        .add_systems(Update, toggle_wireframe)
         .run();
 }
 
-#[derive(Component)]
-struct Person;
+const X_EXTENT: f32 = 900.;
 
-#[derive(Component)]
-struct Name(String);
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    commands.spawn(Camera2d);
 
-fn add_people(mut commands: Commands) {
-    commands.spawn((Person, Name("Elaina Proctor".to_string())));
-    commands.spawn((Person, Name("Renzo Hume".to_string())));
-    commands.spawn((Person, Name("Zayna Nieves".to_string())));
-}
+    let shapes = [
+        meshes.add(Ellipse::new(25.0, 50.0)),
+        meshes.add(Capsule2d::new(25.0, 50.0)),
+    ];
+    let num_shapes = shapes.len();
 
-fn update_people(mut query: Query<&mut Name, With<Person>>) {
-    for mut name in &mut query {
-        if name.0 == "Elaina Proctor" {
-            name.0 = "Elaina Hume".to_string();
-            break; // We don't need to change any other names.
-        }
+    for (i, shape) in shapes.into_iter().enumerate() {
+        // Distribute colors evenly across the rainbow.
+        let color = Color::hsl(360. * i as f32 / num_shapes as f32, 0.95, 0.7);
+
+        commands.spawn((
+            Mesh2d(shape),
+            MeshMaterial2d(materials.add(color)),
+            Transform::from_xyz(
+                // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
+                -X_EXTENT / 2. + i as f32 / (num_shapes - 1) as f32 * X_EXTENT,
+                0.0,
+                0.0,
+            ),
+        ));
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    commands.spawn((
+        Text::new("Press space to toggle wireframes"),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(12.0),
+            left: Val::Px(12.0),
+            ..default()
+        },
+    ));
 }
 
-fn greet_people(query: Query<&Name, With<Person>>) {
-    for name in &query {
-        println!("hello {}!", name.0);
+#[cfg(not(target_arch = "wasm32"))]
+fn toggle_wireframe(
+    mut wireframe_config: ResMut<Wireframe2dConfig>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    if keyboard.just_pressed(KeyCode::Space) {
+        wireframe_config.global = !wireframe_config.global;
     }
 }
