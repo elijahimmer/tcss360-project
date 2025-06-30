@@ -28,14 +28,21 @@
     naersk' = pkgs.callPackage naersk {};
 
     buildInputs = with pkgs;
-      lib.optionals (pkgs.stdenv.isLinux) [
-        libxkbcommon
-        libudev-zero
+      lib.optionals (stdenv.isLinux) [
+        # for Linux
+        # Audio (Linux only)
+        alsa-lib
+        # Cross Platform 3D Graphics API
         vulkan-loader
+        # For debugging around vulkan
+        vulkan-tools
+        # Other dependencies
+        libudev-zero
+        xorg.libX11
         xorg.libXcursor
         xorg.libXi
         xorg.libXrandr
-        alsa-lib
+        libxkbcommon
       ];
 
     nativeBuildInputs = with pkgs; [
