@@ -1,70 +1,54 @@
-use bevy::prelude::*;
+mod coords;
+use coords::*;
 
-#[cfg(not(target_arch = "wasm32"))]
-use bevy::sprite::{Wireframe2dConfig, Wireframe2dPlugin};
+use bevy::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins((
-            DefaultPlugins,
-
-            #[cfg(not(target_arch = "wasm32"))]
-            Wireframe2dPlugin::default(),
-        ))
+        .add_plugins((DefaultPlugins,))
         .add_systems(Startup, setup)
-        .add_systems(Update, toggle_wireframe)
         .run();
 }
 
-const X_EXTENT: f32 = 900.;
+const WIDTH_OFFSET: f32 = -HEX_WIDTH * 5.;
+const HEIGHT_OFFSET: f32 = 0.;
+const HEX_SIZE: f32 = HEX_HEIGHT / 2.;
+const HEX_WIDTH: f32 = 23. * 2.;
+const HEX_HEIGHT: f32 = 29. * 2.;
+const NUM_WIDE: usize = 8;
+const NUM_TALL: usize = 8;
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
-    let shapes = [
-        meshes.add(Ellipse::new(25.0, 50.0)),
-        meshes.add(Capsule2d::new(25.0, 50.0)),
-    ];
-    let num_shapes = shapes.len();
+    let base_hex = asset_server.load("BaseHexagon.png");
 
-    for (i, shape) in shapes.into_iter().enumerate() {
+    for i in 0..(NUM_WIDE * NUM_TALL) {
+        let final_sprite = Sprite {
+            image: base_hex.clone(),
+            image_mode: SpriteImageMode::Scale(ScalingMode::FitCenter),
+            color: Color::hsl(360. * i as f32 / 256. as f32, 0.95, 0.7),
+            custom_size: Some(Vec2{
+                x: HEX_WIDTH,
+                y: HEX_HEIGHT,
+
+            }),
+            ..default()
+        };
+
+        let col = i % NUM_WIDE;
+        let row = i / NUM_WIDE;
+        let row_offset_rel: f32 = (row & 1 == 0).then_some(0.5).unwrap_or(0.);
+
         // Distribute colors evenly across the rainbow.
-        let color = Color::hsl(360. * i as f32 / num_shapes as f32, 0.95, 0.7);
-
         commands.spawn((
-            Mesh2d(shape),
-            MeshMaterial2d(materials.add(color)),
+            final_sprite,
             Transform::from_xyz(
-                // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
-                -X_EXTENT / 2. + i as f32 / (num_shapes - 1) as f32 * X_EXTENT,
-                0.0,
-                0.0,
+                (col as f32 + row_offset) * HEX_WIDTH
+                    + WIDTH_OFFSET,
+                (i / NUM_WIDE) as f32 * HEX_HEIGHT * 3. / 4. + HEIGHT_OFFSET,
+                0.,
             ),
         ));
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    commands.spawn((
-        Text::new("Press space to toggle wireframes"),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(12.0),
-            left: Val::Px(12.0),
-            ..default()
-        },
-    ));
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn toggle_wireframe(
-    mut wireframe_config: ResMut<Wireframe2dConfig>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-) {
-    if keyboard.just_pressed(KeyCode::Space) {
-        wireframe_config.global = !wireframe_config.global;
     }
 }
