@@ -8,6 +8,12 @@ pub type Size = f32;
 /// TODO: Replace with `std::f32::consts::SQRT_3` when that is stable.
 pub const SQRT_3: f32 = 1.732050807568877293527446341505872367_f32; // 1.73205078f32
 
+//pub enum Axis {
+//    Q,
+//    R,
+//    S,
+//}
+
 /// The coordinate system is based on the 'Axial Coordinates'
 ///  https://www.redblobgames.com/grids/hexagons/
 ///
@@ -57,7 +63,7 @@ pub const SQRT_3: f32 = 1.732050807568877293527446341505872367_f32; // 1.7320507
 ///                    \ /     \ /
 ///
 ///
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
 pub struct Axial {
     /// This represents the horizontal axis
     /// A fixed point number with 8 decimal bits
@@ -196,6 +202,7 @@ impl Display for Axial {
 mod tests {
     use super::*;
 
+    #[test]
     fn test_add() {
         assert_eq!(Axial::ORIGIN + Axial::ORIGIN, Axial::ORIGIN);
         assert_eq!(
@@ -254,7 +261,7 @@ mod tests {
 ///       \     / \     /
 ///         \ /     \ /
 ///
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Direction {
     East,
     NorthEast,
@@ -286,13 +293,35 @@ impl Direction {
             Direction::SouthEast => PI * 5. / 3.,
         }
     }
+
+    pub const fn invert_x(self) -> Self {
+        match self {
+            Direction::East => Direction::West,
+            Direction::NorthEast => Direction::NorthWest,
+            Direction::NorthWest => Direction::NorthEast,
+            Direction::West => Direction::East,
+            Direction::SouthWest => Direction::SouthEast,
+            Direction::SouthEast => Direction::SouthWest,
+        }
+    }
+
+    pub const fn invert_y(self) -> Self {
+        match self {
+            Direction::East => Direction::East,
+            Direction::NorthEast => Direction::SouthEast,
+            Direction::NorthWest => Direction::SouthWest,
+            Direction::West => Direction::West,
+            Direction::SouthWest => Direction::NorthWest,
+            Direction::SouthEast => Direction::NorthEast,
+        }
+    }
 }
 
 impl Into<Vec2> for Direction {
     fn into(self) -> Vec2 {
         Vec2 {
-            x: self.to_angle().sin(),
-            y: self.to_angle().cos(),
+            x: self.to_angle().cos(),
+            y: self.to_angle().sin(),
         }
     }
 }
