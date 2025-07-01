@@ -90,11 +90,7 @@ impl Axial {
     };
 
     pub fn neighbor(self, dir: Direction) -> Self {
-        self + Into::<Self>::into(dir)
-    }
-
-    pub const fn length(self) -> Size {
-        return (self.q.abs() + self.r.abs()) / 2.;
+        self + dir.into()
     }
 
     pub fn round(self) -> Self {
@@ -102,14 +98,13 @@ impl Axial {
         let r_grid = self.r.round();
         let q_frac = self.q.fract();
         let r_frac = self.r.fract();
-        let dq = (q_frac + 0.5 * r_frac).round()
-            * (q_frac * q_frac >= r_frac * r_frac)
-                .then_some(1.0)
-                .unwrap_or(0.);
-        let dr = (r_frac + 0.5 * q_frac).round()
-            * (q_frac * q_frac < r_frac * r_frac)
-                .then_some(1.0)
-                .unwrap_or(0.);
+
+        let (offset_q, offset_r) = (q_frac * q_frac >= r_frac * r_frac)
+            .then_some((1., 0.))
+            .unwrap_or((0., 1.));
+
+        let dq = (q_frac + 0.5 * r_frac).round() * offset_q;
+        let dr = (r_frac + 0.5 * q_frac).round() * offset_r;
         return Self {
             q: q_grid + dq,
             r: r_grid + dr,
@@ -119,14 +114,7 @@ impl Axial {
 
 impl From<Direction> for Axial {
     fn from(dir: Direction) -> Self {
-        match dir {
-            Direction::East => Self::R,
-            Direction::SouthEast => Self::Q,
-            Direction::SouthWest => Self::S,
-            Direction::West => -Self::R,
-            Direction::NorthWest => -Self::Q,
-            Direction::NorthEast => -Self::S,
-        }
+        dir.to_axial()
     }
 }
 
@@ -294,6 +282,24 @@ impl Direction {
         }
     }
 
+    pub fn to_vec2(self) -> Vec2 {
+        Vec2 {
+            x: self.to_angle().cos(),
+            y: self.to_angle().sin(),
+        }
+    }
+
+    pub fn to_axial(self) -> Axial {
+        match self {
+            Direction::East => Axial::R,
+            Direction::SouthEast => Axial::Q,
+            Direction::SouthWest => Axial::S,
+            Direction::West => -Axial::R,
+            Direction::NorthWest => -Axial::Q,
+            Direction::NorthEast => -Axial::S,
+        }
+    }
+
     pub const fn invert_x(self) -> Self {
         match self {
             Direction::East => Direction::West,
@@ -317,11 +323,8 @@ impl Direction {
     }
 }
 
-impl Into<Vec2> for Direction {
-    fn into(self) -> Vec2 {
-        Vec2 {
-            x: self.to_angle().cos(),
-            y: self.to_angle().sin(),
-        }
+impl From<Direction> for Vec2 {
+    fn from(dir: Direction) -> Vec2 {
+        dir.to_vec2()
     }
 }
