@@ -31,19 +31,18 @@
       lib.optionals (stdenv.isLinux) [
         # for Linux
         # Audio (Linux only)
-        alsa-lib
+        alsa-lib-with-plugins
         # Cross Platform 3D Graphics API
         vulkan-loader
         # For debugging around vulkan
         vulkan-tools
-        # Other dependencies
-        libudev-zero
+        wayland
         xorg.libX11
         xorg.libXcursor
         xorg.libXi
         xorg.libXrandr
-        wayland
         libxkbcommon
+        udev 
       ];
 
     nativeBuildInputs = with pkgs; [
@@ -74,9 +73,9 @@
 
     devShells.default = pkgs.mkShell {
       nativeBuildInputs = all_deps;
+      LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath all_deps ++ pkgs.lib.makeLibraryPath all_deps;
       shellHook = ''
         export CARGO_MANIFEST_DIR=$(pwd)
-        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath all_deps}"
       '';
     };
 

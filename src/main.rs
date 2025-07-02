@@ -94,7 +94,6 @@ fn check_textures(
 fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera2d,
-        // TODO: Look at other zoom options
         PixelZoom::FitSize {
             width: SCREEN_WIDTH as i32,
             height: SCREEN_HEIGHT as i32,
@@ -217,7 +216,7 @@ fn spawn_sky(
 
 fn sky_movement(
     time: Res<Time<Fixed>>,
-    mut sky_movement: ResMut<SkyMovement>,
+    sky_movement: ResMut<SkyMovement>,
     mut rng: ResMut<RandomSource>,
     mut tilemap: Single<(&TileStorage, &TilemapSize, &mut Transform), With<SkyTileMap>>,
     mut tile_query: Query<&mut TileTextureIndex, With<SkyTile>>,
@@ -272,7 +271,7 @@ fn sky_movement(
                         continue;
                     };
 
-                    let Ok(mut curr_tile_texture) =
+                    let Ok(curr_tile_texture) =
                         tile_query.get(curr_tile_entity).and_then(|t| Ok(*t))
                     else {
                         continue;
