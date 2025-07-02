@@ -1,53 +1,41 @@
-//! In this example we generate four texture atlases (sprite sheets) from a folder containing
-//! individual sprites.
-//!
-//! The texture atlases are generated with different padding and sampling to demonstrate the
-//! effect of these settings, and how bleeding issues can be resolved by padding the sprites.
-//!
-//! Only one padded and one unpadded texture atlas are rendered to the screen.
-//! An upscaled sprite from each of the four atlases are rendered to the screen.
-
 mod coords;
 use coords::*;
 
-use bevy::{
-    asset::LoadedFolder,
-    color::palettes::css::GRAY,
-    prelude::*,
-    render::{
-        camera::RenderTarget,
-        render_resource::{
-            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-        },
-        view::RenderLayers,
-    },
-    window::WindowResized,
-};
+use bevy::{asset::LoadedFolder, prelude::*, sprite::Anchor};
+use bevy_ecs_tilemap::prelude::*;
+use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
+use rand::{prelude::*, rngs::SmallRng};
 
-/// Default render layers for pixel-perfect rendering.
-/// You can skip adding this component, as this is the default.
-const PIXEL_PERFECT_LAYERS: RenderLayers = RenderLayers::layer(0);
+const SCREEN_WIDTH: u32 = 480;
+const SCREEN_HEIGHT: u32 = 270;
 
-/// Render layers for high-resolution rendering.
-const HIGH_RES_LAYERS: RenderLayers = RenderLayers::layer(1);
-
-/// In-game resolution width.
-const RES_WIDTH: u32 = 160;
-
-/// In-game resolution height.
-const RES_HEIGHT: u32 = 90;
+const FLOOR_TILE_ATLAS_WIDTH: u32 = 1;
+const FLOOR_TILE_ATLAS_HEIGHT: u32 = 7;
+const FLOOR_TILE_PADDING: Option<UVec2> = Some(UVec2 { x: 2, y: 0 });
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // fallback to nearest sampling
+        .add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "KhImNgu Game".into(),
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        ) // fallback to nearest sampling
+        .add_plugins(PixelCameraPlugin)
+        .add_plugins(TilemapPlugin)
         .init_state::<AppState>()
-        .add_systems(OnEnter(AppState::Setup), load_textures)
+        .add_systems(OnEnter(AppState::Setup), init_resources)
         .add_systems(Update, check_textures.run_if(in_state(AppState::Setup)))
         .add_systems(
             OnEnter(AppState::Finished),
-            (setup_camera, setup_sprites).chain(),
+            (setup_camera, spawn_floors, spawn_sky),
         )
-        .add_systems(Update, (fit_canvas, sprite_movement))
+        .add_systems(Update, sky_movement.run_if(in_state(AppState::Finished)))
         .run();
 }
 
@@ -58,26 +46,36 @@ enum AppState {
     Finished,
 }
 
-/// Low-resolution texture that contains the pixel-perfect world.
-/// Canvas itself is rendered to the high-resolution world.
+/// Indicates a tile is a sky tile
 #[derive(Component)]
-struct Canvas;
+struct SkyTile;
 
-/// Camera that renders the pixel-perfect world to the [`Canvas`].
 #[derive(Component)]
-struct InGameCamera;
+struct SkyTileMap;
 
-/// Camera that renders the [`Canvas`] (and other graphics on [`HIGH_RES_LAYERS`]) to the screen.
-#[derive(Component)]
-struct OuterCamera;
+#[derive(Resource)]
+struct SkyMovement {
+    /// The speed of movement in tiles per second, in axial coordinates.
+    speed: Vec2,
+}
+
+/// The source of randomness used by this example.
+#[derive(Resource)]
+struct RandomSource(SmallRng);
 
 /// The asset folder holding all the sprite sheets.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 struct SpriteFolder(Handle<LoadedFolder>);
 
-fn load_textures(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn init_resources(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Load multiple, individual sprites from a folder
     commands.insert_resource(SpriteFolder(asset_server.load_folder("sprites")));
+
+    commands.insert_resource(SkyMovement {
+        speed: Vec2::new(5., 3.),
+    });
+
+    commands.insert_resource(RandomSource(SmallRng::from_os_rng()));
 }
 
 fn check_textures(
@@ -93,142 +91,223 @@ fn check_textures(
     }
 }
 
-fn setup_sprites(
+fn setup_camera(mut commands: Commands) {
+    commands.spawn((
+        Camera2d,
+        // TODO: Look at other zoom options
+        PixelZoom::FitSize {
+            width: SCREEN_WIDTH as i32,
+            height: SCREEN_HEIGHT as i32,
+        },
+        PixelViewport,
+    ));
+}
+
+fn spawn_floors(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     // Create texture atlases with different padding and sampling
-    let texture = asset_server.load("sprites/basic_sheet.png");
-    let layout = TextureAtlasLayout::from_grid(
-        UVec2 { x: 24, y: 29 },
-        7,
-        1,
-        Some(UVec2 { x: 2, y: 0 }),
+    let floor_texture = asset_server.load("sprites/basic_sheet.png");
+    let floor_layout = TextureAtlasLayout::from_grid(
+        HEX_SIZE.as_uvec2(),
+        FLOOR_TILE_ATLAS_HEIGHT,
+        FLOOR_TILE_ATLAS_WIDTH,
+        FLOOR_TILE_PADDING,
         None,
     );
-    let texture_atlas_layout = texture_atlas_layouts.add(layout);
+    let floor_texture_atlas_layout = texture_atlas_layouts.add(floor_layout);
 
+    spawn_section(
+        &mut commands,
+        IVec2::ZERO,
+        floor_texture.clone(),
+        floor_texture_atlas_layout.clone(),
+    );
+
+    Direction::ALL
+        .iter()
+        .map(|dir| dir.as_ivec2() * 4)
+        .for_each(|trans| {
+            spawn_section(
+                &mut commands,
+                trans,
+                floor_texture.clone(),
+                floor_texture_atlas_layout.clone(),
+            );
+        });
+}
+
+fn spawn_section(
+    commands: &mut Commands,
+    center: IVec2,
+    texture: Handle<Image>,
+    layout: Handle<TextureAtlasLayout>,
+) {
+    let sprite = Sprite {
+        image: texture.clone(),
+        texture_atlas: Some(TextureAtlas {
+            layout: layout.clone(),
+            index: 0,
+        }),
+        anchor: Anchor::Center,
+        ..Default::default()
+    };
     commands.spawn((
-        Sprite::from_atlas_image(
-            texture.clone(),
-            TextureAtlas {
-                layout: texture_atlas_layout.clone(),
-                index: 0,
-            },
-        ),
-        Transform::IDENTITY,
-        PIXEL_PERFECT_LAYERS,
+        sprite.clone(),
+        Transform::from_translation(center.as_vec2().extend(0.)),
     ));
 
     Direction::ALL
         .iter()
-        .map(|dir| {
-            (
-                dir,
-                <coords::Direction as Into<Vec2>>::into(*dir).extend(0.),
-            )
-        })
-        .zip(1..)
-        .map(|((dir, trans), i)| {
-            (
-                Sprite::from_atlas_image(
-                    texture.clone(),
-                    TextureAtlas {
-                        layout: texture_atlas_layout.clone(),
-                        index: i,
-                    },
-                ),
-                Transform::from_translation(trans * Vec3::new(24., 29., 1.)),
-                PIXEL_PERFECT_LAYERS,
-                *dir,
-            )
-        })
-        .for_each(|s| {
-            commands.spawn(s);
+        .map(|dir| (center + dir.as_ivec2()).as_vec2().extend(0.))
+        .for_each(|trans| {
+            commands.spawn((sprite.clone(), Transform::from_translation(trans)));
         });
 }
 
-fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let canvas_size = Extent3d {
-        width: RES_WIDTH,
-        height: RES_HEIGHT,
-        ..default()
-    };
-
-    // This Image serves as a canvas representing the low-resolution game screen
-    let mut canvas = Image {
-        texture_descriptor: TextureDescriptor {
-            label: None,
-            size: canvas_size,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Bgra8UnormSrgb,
-            mip_level_count: 1,
-            sample_count: 1,
-            usage: TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        },
-        ..default()
-    };
-
-    // Fill image.data with zeroes
-    canvas.resize(canvas_size);
-
-    let image_handle = images.add(canvas);
-
-    // This camera renders whatever is on `PIXEL_PERFECT_LAYERS` to the canvas
-    commands.spawn((
-        Camera2d,
-        Camera {
-            // Render before the "main pass" camera
-            order: -1,
-            target: RenderTarget::Image(image_handle.clone().into()),
-            clear_color: ClearColorConfig::Custom(GRAY.into()),
-            ..default()
-        },
-        Msaa::Off,
-        InGameCamera,
-        PIXEL_PERFECT_LAYERS,
-    ));
-
-    // Spawn the canvas
-    commands.spawn((Sprite::from_image(image_handle), Canvas, HIGH_RES_LAYERS));
-
-    // The "outer" camera renders whatever is on `HIGH_RES_LAYERS` to the screen.
-    // here, the canvas and one of the sample sprites will be rendered by this camera
-    commands.spawn((Camera2d, Msaa::Off, OuterCamera, HIGH_RES_LAYERS));
-}
-
-/// The sprite is animated by changing its translation depending on the time that has passed since
-/// the last frame.
-fn sprite_movement(time: Res<Time>, mut sprite_position: Query<(&mut Direction, &mut Transform)>) {
-    for (mut logo, mut transform) in &mut sprite_position {
-        transform.translation +=
-            <coords::Direction as Into<Vec2>>::into(*logo).extend(0.) * (50. * time.delta_secs());
-
-        if !(-(RES_WIDTH as f32)..RES_WIDTH as f32).contains(&transform.translation.x) {
-            *logo = logo.invert_x();
-        }
-
-        if !(-(RES_HEIGHT as f32)..RES_HEIGHT as f32).contains(&transform.translation.y) {
-            *logo = logo.invert_y();
-        }
-    }
-}
-
-/// Scales camera projection to fit the window (integer multiples only).
-fn fit_canvas(
-    mut resize_events: EventReader<WindowResized>,
-    mut projection: Single<&mut Projection, With<OuterCamera>>,
+fn spawn_sky(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut rng: ResMut<RandomSource>,
 ) {
-    let Projection::Orthographic(projection) = &mut **projection else {
-        return;
-    };
-    for event in resize_events.read() {
-        let h_scale = event.width / RES_WIDTH as f32;
-        let v_scale = event.height / RES_HEIGHT as f32;
-        projection.scale = 1. / h_scale.min(v_scale).round();
+    let texture_handle: Handle<Image> = asset_server.load("sprites/sky_sheet.png");
+
+    let tilemap_entity = commands.spawn_empty().id();
+    let mut tile_storage = TileStorage::empty(SKY_MAP_SIZE);
+
+    for x in 0..SKY_MAP_SIZE.x {
+        for y in 0..SKY_MAP_SIZE.y {
+            let tile_pos = TilePos { x, y };
+            let tile_entity = commands
+                .spawn((
+                    TileBundle {
+                        position: tile_pos,
+                        tilemap_id: TilemapId(tilemap_entity),
+                        texture_index: TileTextureIndex(rng.0.random_range(0..SKY_TILE_VARIENT_COUNT)),
+                        //color: TileColor(Color::srgba(0.0, 0.0, 0.0, 1.0)),
+                        ..Default::default()
+                    },
+                    SkyTile,
+                ))
+                .id();
+            tile_storage.set(&tile_pos, tile_entity);
+        }
     }
+
+    let grid_size = SKY_TILE_SIZE.into();
+    let map_type = TilemapType::Hexagon(HexCoordSystem::Row);
+
+    commands.entity(tilemap_entity).insert((
+        TilemapBundle {
+            grid_size,
+            map_type,
+            size: SKY_MAP_SIZE,
+            storage: tile_storage,
+            texture: TilemapTexture::Single(texture_handle),
+            tile_size: SKY_TILE_SIZE,
+            anchor: TilemapAnchor::Center,
+            transform: Transform::from_xyz(0., 0., SKY_TILE_LAYER),
+            ..Default::default()
+        },
+        SkyTileMap,
+    ));
 }
+
+fn sky_movement(
+    time: Res<Time<Fixed>>,
+    mut sky_movement: ResMut<SkyMovement>,
+    mut rng: ResMut<RandomSource>,
+    mut tilemap: Single<(&TileStorage, &TilemapSize, &mut Transform), With<SkyTileMap>>,
+    mut tile_query: Query<&mut TileTextureIndex, With<SkyTile>>,
+) {
+    let map_size = IVec2::new(tilemap.1.x as i32, tilemap.1.y as i32);
+    let tile_storage = tilemap.0;
+
+    let old_translation = tilemap.2.translation.xy();
+    let mut new_translation =
+        AXIAL_TRANSLATION_MATRIX * sky_movement.speed * time.delta_secs() + old_translation;
+
+    let tile_diff = (new_translation / SKY_TILE_SIZE_LOOP_THRESHOLD)
+        .trunc()
+        .as_ivec2();
+
+
+    if tile_diff != IVec2::ZERO {
+        let flip_x = tile_diff.x > 0;
+        let flip_y = tile_diff.y > 0;
+
+        for y in 0..map_size.y {
+            let y = flip_y.then_some(map_size.y - y - 1).unwrap_or(y);
+            for x in 0..map_size.x {
+                let x = flip_x.then_some(map_size.x - x - 1).unwrap_or(x);
+
+                let old_pos = IVec2 { x, y };
+                // for the hexagons to align with where you started, they have
+                // to move 1.5 hexes up or 1 hex to the right.
+                // This does the 1.5 hexes up adjustment to turn the
+                // hex distance into square distance used by the position.
+                let adjusted_diff = (Mat2::from_cols_array_2d(&[
+                    [1., 0.],
+                    [-1., 2.]
+                ]) * tile_diff.as_vec2()).as_ivec2();
+                let replace_pos = old_pos + adjusted_diff;
+                let new_pos = old_pos - adjusted_diff;
+
+                let Some(curr_tile_entity) = tile_storage.get(&TilePos {
+                    x: x as u32,
+                    y: y as u32,
+                }) else {
+                    continue;
+                };
+
+                if replace_pos.cmpge(IVec2::ZERO).all() && replace_pos.cmplt(map_size).all() {
+                    // move the texture along the `tile_diff` vector
+
+                    let Some(new_tile_entity) = tile_storage.get(&TilePos {
+                        x: replace_pos.x as u32,
+                        y: replace_pos.y as u32,
+                    }) else {
+                        continue;
+                    };
+
+                    let Ok(mut curr_tile_texture) =
+                        tile_query.get(curr_tile_entity).and_then(|t| Ok(*t))
+                    else {
+                        continue;
+                    };
+
+                    match tile_query.get_mut(new_tile_entity) {
+                        Ok(mut new_tile_texture) => *new_tile_texture = curr_tile_texture,
+                        Err(err) => warn!("Failed to find replacing sky tile at {replace_pos} with {err}"),
+                    }
+                } else {
+                }
+
+                if new_pos.cmplt(IVec2::ZERO).any() || new_pos.cmpge(map_size).any() {
+                    match tile_query.get_mut(curr_tile_entity) {
+                        Ok(mut curr_tile_texture) => {
+                            let tile_idx = rng.0.random_range(0..SKY_TILE_VARIENT_COUNT);
+                            *curr_tile_texture = TileTextureIndex(tile_idx);
+                        }
+                        Err(err) => warn!("Failed to get current tile at {new_pos} with {err}"),
+                    };
+                }
+            }
+        }
+    }
+
+    new_translation -= tile_diff.as_vec2() * SKY_TILE_SIZE_LOOP_THRESHOLD;
+
+    tilemap.2.translation = new_translation.extend(tilemap.2.translation.z);
+}
+
+const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 16, y: 12 };
+const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48., y: 52. };
+const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
+    x: SKY_TILE_SIZE.x,
+    y: SKY_TILE_SIZE.y * 1.5,
+};
+const SKY_TILE_LAYER: f32 = -1.;
+const SKY_TILE_VARIENT_COUNT: u32 = 8;

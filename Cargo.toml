@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.16.1"
+bevy = { version = "0.16.1", features = ["glam_assert", "file_watcher"] }
+bevy_ecs_tilemap = { version = "0.16.0", features = ["atlas"] }
+bevy_pixcam = "0.16.0"
+rand = { version = "0.9.1", features = ["log"] }
 
 [profile.dev]
 opt-level = 1

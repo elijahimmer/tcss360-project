@@ -3,10 +3,17 @@ use std::f32::consts::PI;
 use std::fmt::{Display, Formatter};
 use std::ops;
 
-pub type Size = f32;
+pub type Size = i32;
 
 /// TODO: Replace with `std::f32::consts::SQRT_3` when that is stable.
-pub const SQRT_3: f32 = 1.732050807568877293527446341505872367_f32; // 1.73205078f32
+pub const SQRT_3: f32 = 1.732050807568877293527446341505872367_f32;
+pub const SQRT_3_2: f32 = 0.866025403784438646763723170752936183_f32;
+
+/// The full hex size
+pub const HEX_SIZE: IVec2 = IVec2 { x: 24, y: 26 };
+/// The offset from the center of one hexagon to the center of another
+/// hex that is in the `S` or `Q` direction.
+pub const HEX_HORI: IVec2 = IVec2 { x: 12, y: -20 };
 
 //pub enum Axis {
 //    Q,
@@ -62,77 +69,71 @@ pub const SQRT_3: f32 = 1.732050807568877293527446341505872367_f32; // 1.7320507
 ///                  \     / \     /
 ///                    \ /     \ /
 ///
+/// Internally, this uses a normal vector, where the `x` coordinate is the `q` coordinate
+/// and the `y` coordinate is actually the `r` coordinate.
 ///
-#[derive(Component, Clone, Copy, PartialEq, Debug)]
-pub struct Axial {
-    /// This represents the horizontal axis
-    /// A fixed point number with 8 decimal bits
-    q: Size,
-    /// This represents the south-east axis
-    /// A fixed point number with 8 decimal bits
-    r: Size,
-}
+///
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub struct Axial(pub IVec2);
 
 impl Axial {
-    pub const ORIGIN: Self = Self { q: 0., r: 0. };
+    pub const ZERO: Self = Self(IVec2::ZERO);
 
-    pub const Q: Self = Self {
-        q: 1.,
-        ..Axial::ORIGIN
-    };
-    pub const R: Self = Self {
-        r: 1.,
-        ..Axial::ORIGIN
-    };
-    pub const S: Self = Self {
-        r: 1.,
-        ..Axial::ORIGIN
-    };
+    pub const Q: Self = Self(IVec2 { x: 1, y: 0 });
+    pub const R: Self = Self(IVec2 { x: 0, y: 1 });
+    pub const S: Self = Self(IVec2 { x: 1, y: -1 });
+
+    pub fn new(q: Size, r: Size) -> Axial {
+        Axial(IVec2 { x: q, y: r })
+    }
 
     pub fn neighbor(self, dir: Direction) -> Self {
         self + dir.into()
     }
 
-    pub fn round(self) -> Self {
-        let q_grid = self.q.round();
-        let r_grid = self.r.round();
-        let q_frac = self.q.fract();
-        let r_frac = self.r.fract();
+    pub fn as_ivec2(self) -> IVec2 {
+        IVec2 {
+            x: self.0.y * HEX_SIZE.x,
+            y: 0,
+        } + (self.0.x * HEX_HORI)
+    }
 
-        let (offset_q, offset_r) = (q_frac * q_frac >= r_frac * r_frac)
-            .then_some((1., 0.))
-            .unwrap_or((0., 1.));
+    pub fn as_vec2(self) -> Vec2 {
+        self.as_ivec2().as_vec2()
+    }
 
-        let dq = (q_frac + 0.5 * r_frac).round() * offset_q;
-        let dr = (r_frac + 0.5 * q_frac).round() * offset_r;
-        return Self {
-            q: q_grid + dq,
-            r: r_grid + dr,
-        };
+    pub fn as_ivec3(self, z: i32) -> IVec3 {
+        self.as_ivec2().extend(z)
+    }
+
+    pub fn as_vec3(self, z: f32) -> Vec3 {
+        self.as_vec2().extend(z)
     }
 }
 
 impl From<Direction> for Axial {
     fn from(dir: Direction) -> Self {
-        dir.to_axial()
+        dir.as_axial()
     }
 }
+
+pub const AXIAL_TRANSLATION_MATRIX: Mat2 = Mat2::from_cols_array(&[SQRT_3_2, 1. / 3., 0., 2. / 3.]);
 
 impl From<Vec2> for Axial {
     fn from(value: Vec2) -> Self {
-        Self {
-            q: value.x * SQRT_3 / 2. + value.y / 3.,
-            r: value.y * 2. / 3.,
-        }
+        Self((AXIAL_TRANSLATION_MATRIX * value).as_ivec2())
     }
 }
 
-impl From<Axial> for Vec2 {
-    fn from(value: Axial) -> Vec2 {
-        Vec2 {
-            x: SQRT_3 * value.q + SQRT_3 / 2. * value.r,
-            y: value.r * 3. / 2.,
-        }
+impl From<Axial> for IVec2 {
+    fn from(value: Axial) -> IVec2 {
+        value.as_ivec2()
+    }
+}
+
+impl From<IVec2> for Axial {
+    fn from(value: IVec2) -> Self {
+        Self::from(value.as_vec2())
     }
 }
 
@@ -140,10 +141,7 @@ impl ops::Add for Axial {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        Self {
-            q: self.q + rhs.q,
-            r: self.r + rhs.r,
-        }
+        Self(self.0 + rhs.0)
     }
 }
 
@@ -151,10 +149,7 @@ impl ops::Sub for Axial {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        Self {
-            q: self.q - rhs.q,
-            r: self.r - rhs.r,
-        }
+        Self(self.0 - rhs.0)
     }
 }
 
@@ -162,10 +157,7 @@ impl ops::Neg for Axial {
     type Output = Self;
 
     fn neg(self) -> Self {
-        Self {
-            q: -self.q,
-            r: -self.r,
-        }
+        Self(-self.0)
     }
 }
 
@@ -173,16 +165,13 @@ impl ops::Mul<Size> for Axial {
     type Output = Self;
 
     fn mul(self, rhs: Size) -> Self {
-        Self {
-            q: self.q * rhs,
-            r: self.r * rhs,
-        }
+        Self(self.0 * rhs)
     }
 }
 
 impl Display for Axial {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "({}, {}, {})", self.q, self.r, -self.q - self.r)
+        write!(f, "({}, {}, {})", self.0.x, self.0.y, -self.0.x - self.0.y)
     }
 }
 
@@ -192,41 +181,32 @@ mod tests {
 
     #[test]
     fn test_add() {
-        assert_eq!(Axial::ORIGIN + Axial::ORIGIN, Axial::ORIGIN);
+        assert_eq!(Axial::ZERO + Axial::ZERO, Axial::ZERO);
+        assert_eq!(Axial::ZERO + Axial { q: 5., r: 1 }, Axial { q: 5., r: 1 });
+        assert_eq!(Axial::ZERO + Direction::East.into(), Direction::East.into());
         assert_eq!(
-            Axial::ORIGIN + Axial { q: 5., r: 1. },
-            Axial { q: 5., r: 1. }
-        );
-        assert_eq!(
-            Axial::ORIGIN + Direction::East.into(),
-            Direction::East.into()
-        );
-        assert_eq!(
-            Axial::ORIGIN + Direction::NorthEast.into(),
+            Axial::ZERO + Direction::NorthEast.into(),
             Direction::NorthEast.into()
         );
         assert_eq!(
-            Axial::ORIGIN + Direction::NorthWest.into(),
+            Axial::ZERO + Direction::NorthWest.into(),
             Direction::NorthWest.into()
         );
+        assert_eq!(Axial::ZERO + Direction::West.into(), Direction::West.into());
         assert_eq!(
-            Axial::ORIGIN + Direction::West.into(),
-            Direction::West.into()
-        );
-        assert_eq!(
-            Axial::ORIGIN + Direction::SouthWest.into(),
+            Axial::ZERO + Direction::SouthWest.into(),
             Direction::SouthWest.into()
         );
         assert_eq!(
-            Axial::ORIGIN + Direction::SouthEast.into(),
+            Axial::ZERO + Direction::SouthEast.into(),
             Direction::SouthEast.into()
         );
     }
 
     #[test]
     fn test_mul() {
-        assert_eq!(Axial::ORIGIN * 10., Axial::ORIGIN);
-        assert_eq!(Axial { q: 0., r: 1. } * 0., Axial::ORIGIN);
+        assert_eq!(Axial::ZERO * 10, Axial::ZERO);
+        assert_eq!(Axial { q: 0, r: 1 } * 0, Axial::ZERO);
     }
 }
 
@@ -249,8 +229,9 @@ mod tests {
 ///       \     / \     /
 ///         \ /     \ /
 ///
-#[derive(Component, Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Component, Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub enum Direction {
+    #[default]
     East,
     NorthEast,
     NorthWest,
@@ -269,12 +250,12 @@ impl Direction {
         Direction::SouthEast,
     ];
 
-    /// Returns a Cartesian angle in radians where 0.0 is
+    /// Returns a Cartesian angle in radians where 00 is
     /// the x axis, and going counter-clockwise (the standard direction).
-    pub const fn to_angle(self) -> f32 {
+    pub const fn as_angle(self) -> f32 {
         match self {
             Direction::East => 0.,
-            Direction::NorthEast => PI * 1. / 3.,
+            Direction::NorthEast => PI / 3.,
             Direction::NorthWest => PI * 2. / 3.,
             Direction::West => PI,
             Direction::SouthWest => PI * 4. / 3.,
@@ -282,14 +263,23 @@ impl Direction {
         }
     }
 
-    pub fn to_vec2(self) -> Vec2 {
-        Vec2 {
-            x: self.to_angle().cos(),
-            y: self.to_angle().sin(),
-        }
+    pub fn as_ivec2(self) -> IVec2 {
+        self.as_axial().as_ivec2()
     }
 
-    pub fn to_axial(self) -> Axial {
+    pub fn as_vec2(self) -> Vec2 {
+        self.as_axial().as_vec2()
+    }
+
+    pub fn as_ivec3(self, z: i32) -> IVec3 {
+        self.as_axial().as_ivec3(z)
+    }
+
+    pub fn as_vec3(self, z: f32) -> Vec3 {
+        self.as_axial().as_vec3(z)
+    }
+
+    pub fn as_axial(self) -> Axial {
         match self {
             Direction::East => Axial::R,
             Direction::SouthEast => Axial::Q,
@@ -325,6 +315,6 @@ impl Direction {
 
 impl From<Direction> for Vec2 {
     fn from(dir: Direction) -> Vec2 {
-        dir.to_vec2()
+        dir.as_vec2()
     }
 }
