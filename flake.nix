@@ -42,6 +42,7 @@
         xorg.libXcursor
         xorg.libXi
         xorg.libXrandr
+        wayland
         libxkbcommon
       ];
 
