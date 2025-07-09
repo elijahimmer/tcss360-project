@@ -73,7 +73,7 @@
 
     devShells.default = pkgs.mkShell {
       nativeBuildInputs = all_deps;
-      LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath all_deps ++ pkgs.lib.makeLibraryPath all_deps;
+      LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath all_deps;
       shellHook = ''
         export CARGO_MANIFEST_DIR=$(pwd)
       '';
