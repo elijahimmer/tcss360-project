@@ -1,7 +1,11 @@
 mod coords;
 use coords::*;
 
-use bevy::{asset::LoadedFolder, prelude::*, sprite::Anchor};
+use bevy::{
+    asset::LoadedFolder, prelude::*, sprite::Anchor,
+    text::FontSmoothing,
+    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin}
+};
 use bevy_ecs_tilemap::prelude::*;
 use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
 use rand::{prelude::*, rngs::SmallRng};
@@ -12,6 +16,13 @@ const SCREEN_HEIGHT: u32 = 270;
 const FLOOR_TILE_ATLAS_WIDTH: u32 = 1;
 const FLOOR_TILE_ATLAS_HEIGHT: u32 = 7;
 const FLOOR_TILE_PADDING: Option<UVec2> = Some(UVec2 { x: 2, y: 0 });
+
+struct OverlayColor;
+
+impl OverlayColor {
+    const RED: Color = Color::srgb(1.0, 0.0, 0.0);
+    const GREEN: Color = Color::srgb(0.0, 1.0, 0.0);
+}
 
 fn main() {
     App::new()
@@ -28,6 +39,24 @@ fn main() {
         ) // fallback to nearest sampling
         .add_plugins(PixelCameraPlugin)
         .add_plugins(TilemapPlugin)
+        .add_plugins(FpsOverlayPlugin {
+                config: FpsOverlayConfig {
+                    text_config: TextFont {
+                        // Here we define size of our overlay
+                        font_size: 42.0,
+                        // If we want, we can use a custom font
+                        font: default(),
+                        // We could also disable font smoothing,
+                        font_smoothing: FontSmoothing::default(),
+                        ..default()
+                    },
+                    // We can also change color of the overlay
+                    text_color: OverlayColor::GREEN,
+                    // We can also set the refresh interval for the FPS counter
+                    refresh_interval: core::time::Duration::from_millis(100),
+                    enabled: true,
+                },
+            })
         .init_state::<AppState>()
         .add_systems(OnEnter(AppState::Setup), init_resources)
         .add_systems(Update, check_textures.run_if(in_state(AppState::Setup)))
