@@ -1,6 +1,6 @@
 //! The infinite sky implementation
 use crate::coords::*;
-use crate::{RandomSource, GlobalRandom};
+use crate::{GlobalRandom, RandomSource, embed_asset};
 
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
@@ -9,10 +9,13 @@ use rand::Rng;
 
 pub struct SkyPlugin;
 
+const SKY_TILE_ASSET_LOAD_PATH: &'static str = "embedded://assets/sprites/sky_sheet.png";
+
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .init_resource::<SkyMovement>()
+        embed_asset!(app, "assets/sprites/sky_sheet.png");
+
+        app.init_resource::<SkyMovement>()
             .add_systems(Startup, (setup_random, spawn_sky).chain())
             .add_systems(Update, sky_movement);
     }
@@ -42,20 +45,13 @@ impl Default for SkyMovement {
     }
 }
 
-fn setup_random(
-    mut commands: Commands,
-    mut global: GlobalRandom
-    ) {
+fn setup_random(mut commands: Commands, mut global: GlobalRandom) {
     commands.insert_resource(SkyRand(global.fork_rng()));
 }
 
 /// Spawns the sky fitting the screen (to an extent).
-fn spawn_sky(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut rng: ResMut<SkyRand>
-) {
-    let texture_handle: Handle<Image> = asset_server.load("sprites/sky_sheet.png");
+fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: ResMut<SkyRand>) {
+    let texture_handle: Handle<Image> = asset_server.load(SKY_TILE_ASSET_LOAD_PATH);
 
     let tilemap_entity = commands.spawn_empty().id();
     let mut tile_storage = TileStorage::empty(SKY_MAP_SIZE);
@@ -72,7 +68,6 @@ fn spawn_sky(
                             texture_index: TileTextureIndex(
                                 rng.0.random_range(0..SKY_TILE_VARIENT_COUNT),
                             ),
-                            //color: TileColor(Color::srgba(0.0, 0.0, 0.0, 1.0)),
                             ..Default::default()
                         },
                         SkyTile,
