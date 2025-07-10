@@ -10,8 +10,47 @@ rand = { version = "0.9", features = ["log"] }
 wyrand = "0.3"
 
 [dependencies.bevy]
-version = "0.16.1"
-features = ["debug_glam_assert", "file_watcher", "bevy_dev_tools"]
+version = "0.16"
+default-features = false
+features = [
+  # Uncomment and add more as needed.
+  #"animation",
+  "async_executor",
+  "bevy_asset",
+  #"bevy_audio",
+  #"bevy_color",
+  "bevy_core_pipeline",
+  #"bevy_gilrs",
+  #"bevy_gizmos",
+  #"bevy_gltf",
+  #"bevy_input_focus",
+  "bevy_log",
+  #"bevy_mesh_picking_backend",
+  #"bevy_pbr",
+  #"bevy_picking",
+  "bevy_render",
+  #"bevy_scene",
+  "bevy_sprite",
+  #"bevy_sprite_picking_backend",
+  "bevy_state",
+  "bevy_text",
+  "bevy_ui",
+  #"bevy_ui_picking_backend",
+  "bevy_window",
+  "bevy_winit",
+  #"custom_cursor",
+  "default_font",
+  #"hdr",
+  "multi_threaded",
+  "png",
+  #"smaa_luts",
+  "std",
+  "sysinfo_plugin",
+  #"tonemapping_luts",
+  #"vorbis",
+  #"webgl2",
+  "x11",
+]
 
 [profile.dev]
 opt-level = 1
@@ -20,6 +59,11 @@ opt-level = 1
 opt-level = 3
 
 [features]
-default = ["debug"]
-debug = ["bevy/glam_assert", "bevy/file_watcher", "bevy/dynamic_linking"]
+default = []
+debug = [
+  "bevy/glam_assert",
+  "bevy/file_watcher",
+  "bevy/dynamic_linking",
+  "bevy/bevy_dev_tools"
+]
 

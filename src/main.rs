@@ -1,21 +1,21 @@
-mod coords;
-use coords::*;
+mod consts;
+use consts::*;
 
 mod sky;
 use sky::SkyPlugin;
 
+#[cfg(feature = "debug")]
 use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
-    prelude::*,
     text::FontSmoothing,
 };
+
+use bevy::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, helpers::hex_grid::axial::AxialPos, prelude::*};
 use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
 
 use rand::SeedableRng;
 use wyrand::WyRand;
-
-const OVERLAY_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 
 pub type RandomSource = WyRand;
 //#[derive(Resource)]
@@ -28,16 +28,16 @@ macro_rules! embed_asset {
             .world_mut()
             .resource_mut::<::bevy::asset::io::embedded::EmbeddedAssetRegistry>();
 
-        let asset_path = concat!(env!("CARGO_MANIFEST_DIR"), "/", $path);
-        let asset = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", $path));
-
-        embedded.insert_asset(asset_path.into(), ::std::path::Path::new($path), asset);
+        embedded.insert_asset(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/", $path).into(),
+            ::std::path::Path::new($path),
+            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", $path)),
+        );
     }};
 }
 
 fn main() {
     let mut rand = WyRand::from_os_rng();
-
     let mut app = App::new();
 
     app.add_plugins(
@@ -54,6 +54,7 @@ fn main() {
 
     embed_asset!(app, "assets/sprites/basic_sheet.png");
 
+    #[cfg(feature = "debug")]
     app.add_plugins(FpsOverlayPlugin {
         config: FpsOverlayConfig {
             text_config: TextFont {
@@ -71,17 +72,18 @@ fn main() {
             refresh_interval: core::time::Duration::from_millis(100),
             enabled: true,
         },
-    })
+    });
+
     // foreign plugins
-    .add_plugins(PixelCameraPlugin)
-    .add_plugins(TilemapPlugin)
-    // Local Plugins
-    .add_plugins(SkyPlugin {
-        rng: RandomSource::from_rng(&mut rand),
-    })
-    //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
-    .add_systems(Startup, (setup_camera, spawn_floors))
-    .run();
+    app.add_plugins(PixelCameraPlugin)
+        .add_plugins(TilemapPlugin)
+        // Local Plugins
+        .add_plugins(SkyPlugin {
+            rng: RandomSource::from_rng(&mut rand),
+        })
+        //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
+        .add_systems(Startup, (setup_camera, spawn_floors))
+        .run();
 }
 
 fn setup_camera(mut commands: Commands) {
@@ -108,7 +110,8 @@ fn spawn_floors(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 fn spawn_section(commands: &mut Commands, origin: AxialPos, texture: Handle<Image>) {
     let map_size = TilemapSize { x: 1, y: 2 };
-    let center = (origin - AxialPos { q: 1, r: 0 }).center_in_world_row(&HEX_SIZE.as_vec2().into());
+    let center =
+        (origin - AxialPos { q: 1, r: 0 }).center_in_world_row(&FLOOR_TILE_SIZE.as_vec2().into());
 
     let mut tile_storage = TileStorage::empty(map_size);
     let tilemap_entity = commands.spawn_empty().id();
@@ -138,11 +141,11 @@ fn spawn_section(commands: &mut Commands, origin: AxialPos, texture: Handle<Imag
     });
 
     commands.entity(tilemap_entity).insert(TilemapBundle {
-        grid_size: HEX_SIZE.as_vec2().into(),
+        grid_size: FLOOR_TILE_SIZE.as_vec2().into(),
         size: map_size,
         storage: tile_storage,
         texture: TilemapTexture::Single(texture),
-        tile_size: HEX_SIZE.as_vec2().into(),
+        tile_size: FLOOR_TILE_SIZE.as_vec2().into(),
         map_type,
         anchor: TilemapAnchor::Center,
         transform: Transform::from_translation(center.extend(0.)),
