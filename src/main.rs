@@ -5,25 +5,39 @@ mod sky;
 use sky::SkyPlugin;
 
 use bevy::{
-    asset::LoadedFolder,
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
     prelude::*,
     text::FontSmoothing,
 };
-use bevy_ecs_tilemap::{helpers::hex_grid::axial::AxialPos, prelude::*, FrustumCulling};
+use bevy_ecs_tilemap::{FrustumCulling, helpers::hex_grid::axial::AxialPos, prelude::*};
 use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
 use bevy_prng::WyRand;
-use bevy_rand::prelude::{EntropyPlugin, Entropy};
 use bevy_rand::prelude::GlobalEntropy;
+use bevy_rand::prelude::{Entropy, EntropyPlugin};
 
 const OVERLAY_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 
 pub type RandomSource = Entropy<WyRand>;
 pub type GlobalRandom<'a> = GlobalEntropy<'a, WyRand>;
 
+#[macro_export]
+macro_rules! embed_asset {
+    ($app: ident, $path: expr) => {{
+        let embedded = $app
+            .world_mut()
+            .resource_mut::<::bevy::asset::io::embedded::EmbeddedAssetRegistry>();
+
+        let asset_path = concat!(env!("CARGO_MANIFEST_DIR"), "/", $path);
+        let asset = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", $path));
+
+        embedded.insert_asset(asset_path.into(), ::std::path::Path::new($path), asset);
+    }};
+}
+
 fn main() {
-    App::new()
-        .add_plugins(
+    let mut app = App::new();
+
+    app.add_plugins(
             DefaultPlugins
                 .set(ImagePlugin::default_nearest())
                 .set(WindowPlugin {
@@ -58,44 +72,11 @@ fn main() {
         .add_plugins(EntropyPlugin::<WyRand>::default())
         // Local Plugins
         .add_plugins(SkyPlugin)
-        .init_resource::<SpriteFolder>()
-        .init_state::<AppState>()
-        .add_systems(Update, check_textures.run_if(in_state(AppState::Loading)))
-        .add_systems(OnEnter(AppState::Playing), (setup_camera, spawn_floors))
-        .run();
-}
+        .add_systems(Startup, (setup_camera, spawn_floors));
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, States)]
-enum AppState {
-    #[default]
-    Loading,
-    Playing,
-}
+    embed_asset!(app, "assets/sprites/basic_sheet.png");
 
-/// The asset folder holding all the sprite sheets.
-#[derive(Deref, Resource)]
-struct SpriteFolder(Handle<LoadedFolder>);
-impl FromWorld for SpriteFolder {
-    fn from_world(world: &mut World) -> Self {
-        let asset_server = world.resource::<AssetServer>();
-        Self(asset_server.load_folder("sprites"))
-    }
-}
-
-/// Stalls the game until all of the textures have been loaded.
-///
-/// Is this necessary?
-fn check_textures(
-    mut next_state: ResMut<NextState<AppState>>,
-    sprite_folder: Res<SpriteFolder>,
-    mut events: EventReader<AssetEvent<LoadedFolder>>,
-) {
-    // Advance the `AppState` once all sprite handles have been loaded by the `AssetServer`
-    for event in events.read() {
-        if event.is_loaded_with_dependencies(&sprite_folder.0) {
-            next_state.set(AppState::Playing);
-        }
-    }
+    app.run();
 }
 
 fn setup_camera(mut commands: Commands) {
@@ -103,7 +84,7 @@ fn setup_camera(mut commands: Commands) {
 }
 
 fn spawn_floors(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let floor_texture = asset_server.load("sprites/basic_sheet.png");
+    let floor_texture = asset_server.load("embedded://assets/sprites/basic_sheet.png");
 
     [
         AxialPos::new(0, 0),
