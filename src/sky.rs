@@ -1,5 +1,5 @@
 //! The infinite sky implementation
-use crate::coords::*;
+use crate::consts::*;
 use crate::{RandomSource, embed_asset};
 
 use bevy::prelude::*;
