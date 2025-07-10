@@ -11,14 +11,15 @@ use bevy::{
 };
 use bevy_ecs_tilemap::{FrustumCulling, helpers::hex_grid::axial::AxialPos, prelude::*};
 use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
-use bevy_prng::WyRand;
-use bevy_rand::prelude::GlobalEntropy;
-use bevy_rand::prelude::{Entropy, EntropyPlugin};
+
+use rand::SeedableRng;
+use wyrand::WyRand;
 
 const OVERLAY_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 
-pub type RandomSource = Entropy<WyRand>;
-pub type GlobalRandom<'a> = GlobalEntropy<'a, WyRand>;
+pub type RandomSource = WyRand;
+//#[derive(Resource)]
+//pub struct GlobalRandom(RandomSource);
 
 #[macro_export]
 macro_rules! embed_asset {
@@ -35,48 +36,52 @@ macro_rules! embed_asset {
 }
 
 fn main() {
+    let mut rand = WyRand::from_os_rng();
+
     let mut app = App::new();
 
     app.add_plugins(
-            DefaultPlugins
-                .set(ImagePlugin::default_nearest())
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "RaMmYen Game".into(),
-                        ..default()
-                    }),
+        DefaultPlugins
+            .set(ImagePlugin::default_nearest())
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "RaMmYen Game".into(),
                     ..default()
                 }),
-        ) // fallback to nearest sampling
-        .add_plugins(FpsOverlayPlugin {
-            config: FpsOverlayConfig {
-                text_config: TextFont {
-                    // Here we define size of our overlay
-                    font_size: 42.0,
-                    // If we want, we can use a custom font
-                    font: default(),
-                    // We could also disable font smoothing,
-                    font_smoothing: FontSmoothing::default(),
-                    ..default()
-                },
-                // We can also change color of the overlay
-                text_color: OVERLAY_COLOR,
-                // We can also set the refresh interval for the FPS counter
-                refresh_interval: core::time::Duration::from_millis(100),
-                enabled: true,
-            },
-        })
-        // foreign plugins
-        .add_plugins(PixelCameraPlugin)
-        .add_plugins(TilemapPlugin)
-        .add_plugins(EntropyPlugin::<WyRand>::default())
-        // Local Plugins
-        .add_plugins(SkyPlugin)
-        .add_systems(Startup, (setup_camera, spawn_floors));
+                ..default()
+            }),
+    ); // fallback to nearest sampling
 
     embed_asset!(app, "assets/sprites/basic_sheet.png");
 
-    app.run();
+    app.add_plugins(FpsOverlayPlugin {
+        config: FpsOverlayConfig {
+            text_config: TextFont {
+                // Here we define size of our overlay
+                font_size: 42.0,
+                // If we want, we can use a custom font
+                font: default(),
+                // We could also disable font smoothing,
+                font_smoothing: FontSmoothing::default(),
+                ..default()
+            },
+            // We can also change color of the overlay
+            text_color: OVERLAY_COLOR,
+            // We can also set the refresh interval for the FPS counter
+            refresh_interval: core::time::Duration::from_millis(100),
+            enabled: true,
+        },
+    })
+    // foreign plugins
+    .add_plugins(PixelCameraPlugin)
+    .add_plugins(TilemapPlugin)
+    // Local Plugins
+    .add_plugins(SkyPlugin {
+        rng: RandomSource::from_rng(&mut rand),
+    })
+    //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
+    .add_systems(Startup, (setup_camera, spawn_floors))
+    .run();
 }
 
 fn setup_camera(mut commands: Commands) {
