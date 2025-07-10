@@ -28,13 +28,13 @@
             # Audio (Linux only)
             alsa-lib-with-plugins
             # Cross Platform 3D Graphics API
+            libxkbcommon
+            udev
             vulkan-loader
             xorg.libX11
             xorg.libXcursor
             xorg.libXi
             xorg.libXrandr
-            libxkbcommon
-            udev
           ];
         nativeBuildInputs = with pkgs; [
           pkg-config
