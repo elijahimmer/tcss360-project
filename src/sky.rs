@@ -1,19 +1,19 @@
 //! The infinite sky implementation
-use crate::RandomSource;
 use crate::coords::*;
+use crate::{RandomSource, GlobalRandom};
 
-use bevy::{asset::LoadedFolder, prelude::*};
-use bevy_ecs_tilemap::helpers::hex_grid::axial::AxialPos;
+use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
-use rand::{prelude::*, rngs::SmallRng};
+use bevy_rand::prelude::ForkableRng;
+use rand::Rng;
 
 pub struct SkyPlugin;
 
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SkyMovement>()
-            .add_systems(Startup, spawn_sky)
+        app
+            .init_resource::<SkyMovement>()
+            .add_systems(Startup, (setup_random, spawn_sky).chain())
             .add_systems(Update, sky_movement);
     }
 }
@@ -26,10 +26,14 @@ struct SkyTile;
 struct SkyTileMap;
 
 #[derive(Resource)]
+struct SkyRand(RandomSource);
+
+#[derive(Resource)]
 struct SkyMovement {
     /// The speed of movement in tiles per second, in axial coordinates.
-    speed: Vec2,
+    pub speed: Vec2,
 }
+
 impl Default for SkyMovement {
     fn default() -> Self {
         Self {
@@ -38,11 +42,18 @@ impl Default for SkyMovement {
     }
 }
 
+fn setup_random(
+    mut commands: Commands,
+    mut global: GlobalRandom
+    ) {
+    commands.insert_resource(SkyRand(global.fork_rng()));
+}
+
 /// Spawns the sky fitting the screen (to an extent).
 fn spawn_sky(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut rng: ResMut<RandomSource>,
+    mut rng: ResMut<SkyRand>
 ) {
     let texture_handle: Handle<Image> = asset_server.load("sprites/sky_sheet.png");
 
@@ -95,7 +106,7 @@ fn spawn_sky(
 fn sky_movement(
     time: Res<Time>,
     sky_movement: ResMut<SkyMovement>,
-    mut rng: ResMut<RandomSource>,
+    mut rng: ResMut<SkyRand>,
     mut tilemap: Single<(&TileStorage, &TilemapSize, &mut Transform), With<SkyTileMap>>,
     mut tile_query: Query<&mut TileTextureIndex, With<SkyTile>>,
 ) {
@@ -115,7 +126,9 @@ fn sky_movement(
 
     tilemap.2.translation = new_translation.extend(tilemap.2.translation.z);
 
-    if tile_diff == IVec2::ZERO { return; }
+    if tile_diff == IVec2::ZERO {
+        return;
+    }
 
     let flip_x = tile_diff.x > 0;
     let flip_y = tile_diff.y > 0;
@@ -145,26 +158,25 @@ fn sky_movement(
             if replace_pos.cmpge(IVec2::ZERO).all() && replace_pos.cmplt(map_size).all() {
                 // move the texture along the `tile_diff` vector
 
-                let Some(new_tile_entity) = tile_storage.get(&replace_pos.as_uvec2().into())
-                else {
+                let Some(new_tile_entity) = tile_storage.get(&replace_pos.as_uvec2().into()) else {
                     warn!("Failed to find new tile at pos {replace_pos}");
                     continue;
                 };
 
-                let curr_tile_texture =
-                    match tile_query.get(curr_tile_entity).and_then(|t| Ok(*t)) {
-                        Ok(curr_tile_texture) => curr_tile_texture,
-                        Err(err) => {
-                            warn!("Failed to find base sky tile at {old_pos} with {err}");
-                            continue;
-                        }
-                    };
+                let curr_tile_texture = match tile_query.get(curr_tile_entity).and_then(|t| Ok(*t))
+                {
+                    Ok(curr_tile_texture) => curr_tile_texture,
+                    Err(err) => {
+                        warn!("Failed to find base sky tile at {old_pos} with {err}");
+                        continue;
+                    }
+                };
 
                 match tile_query.get_mut(new_tile_entity) {
                     Ok(mut new_tile_texture) => *new_tile_texture = curr_tile_texture,
-                    Err(err) => warn!(
-                        "Failed to find to be replaced sky tile at {replace_pos} with {err}"
-                    ),
+                    Err(err) => {
+                        warn!("Failed to find to be replaced sky tile at {replace_pos} with {err}")
+                    }
                 }
             }
 
