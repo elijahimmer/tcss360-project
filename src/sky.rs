@@ -1,22 +1,34 @@
 //! The infinite sky implementation
 use crate::coords::*;
-use crate::{GlobalRandom, RandomSource, embed_asset};
+use crate::{RandomSource, embed_asset};
 
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use bevy_rand::prelude::ForkableRng;
 use rand::Rng;
 
-pub struct SkyPlugin;
-
+const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 40, y: 24 };
+const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48., y: 52. };
+const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
+    x: SKY_TILE_SIZE.x,
+    y: SKY_TILE_SIZE.y * 1.5,
+};
+const SKY_TILE_LAYER: f32 = -1.;
+const SKY_TILE_VARIENT_COUNT: u32 = 8;
 const SKY_TILE_ASSET_LOAD_PATH: &'static str = "embedded://assets/sprites/sky_sheet.png";
+
+///
+pub struct SkyPlugin {
+    /// The PRRNG for the sky to use.
+    pub rng: RandomSource,
+}
 
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
         embed_asset!(app, "assets/sprites/sky_sheet.png");
 
         app.init_resource::<SkyMovement>()
-            .add_systems(Startup, (setup_random, spawn_sky).chain())
+            .insert_resource(SkyRand(self.rng.clone()))
+            .add_systems(Startup, spawn_sky)
             .add_systems(Update, sky_movement);
     }
 }
@@ -29,7 +41,7 @@ struct SkyTile;
 struct SkyTileMap;
 
 #[derive(Resource)]
-struct SkyRand(RandomSource);
+struct SkyRand(pub RandomSource);
 
 #[derive(Resource)]
 struct SkyMovement {
@@ -43,10 +55,6 @@ impl Default for SkyMovement {
             speed: Vec2::new(5., 2.),
         }
     }
-}
-
-fn setup_random(mut commands: Commands, mut global: GlobalRandom) {
-    commands.insert_resource(SkyRand(global.fork_rng()));
 }
 
 /// Spawns the sky fitting the screen (to an extent).
@@ -187,12 +195,3 @@ fn sky_movement(
         }
     }
 }
-
-const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 40, y: 24 };
-const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48., y: 52. };
-const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
-    x: SKY_TILE_SIZE.x,
-    y: SKY_TILE_SIZE.y * 1.5,
-};
-const SKY_TILE_LAYER: f32 = -1.;
-const SKY_TILE_VARIENT_COUNT: u32 = 8;

@@ -4,12 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy_ecs_tilemap = { version = "0.16.0", features = ["atlas"] }
-bevy_pixcam = "0.16.0"
-bevy_prng = { version = "0.11.1", features = ["bevy_reflect", "std", "wyrand"] }
-bevy_rand = { version = "0.11.1", features = ["wyrand"] }
-rand = { version = "0.9.1", features = ["log"] }
-rand_core = "0.9.3"
+bevy_ecs_tilemap = { version = "0.16", features = ["atlas"] }
+bevy_pixcam = "0.16"
+rand = { version = "0.9", features = ["log"] }
+wyrand = "0.3"
 
 [dependencies.bevy]
 version = "0.16.1"
