@@ -5,27 +5,21 @@ mod sky;
 use sky::SkyPlugin;
 
 use bevy::{
-    asset::LoadedFolder, prelude::*, sprite::Anchor,
+    asset::LoadedFolder,
+    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
+    prelude::*,
     text::FontSmoothing,
-    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin}
 };
-use bevy_ecs_tilemap::prelude::*;
+use bevy_ecs_tilemap::{helpers::hex_grid::axial::AxialPos, prelude::*, FrustumCulling};
 use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
-use rand::{prelude::*, rngs::SmallRng};
+use bevy_prng::WyRand;
+use bevy_rand::prelude::{EntropyPlugin, Entropy};
+use bevy_rand::prelude::GlobalEntropy;
 
-const SCREEN_WIDTH: u32 = 480;
-const SCREEN_HEIGHT: u32 = 270;
+const OVERLAY_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 
-const FLOOR_TILE_ATLAS_WIDTH: u32 = 1;
-const FLOOR_TILE_ATLAS_HEIGHT: u32 = 7;
-const FLOOR_TILE_PADDING: Option<UVec2> = Some(UVec2 { x: 2, y: 0 });
-
-struct OverlayColor;
-
-impl OverlayColor {
-    const RED: Color = Color::srgb(1.0, 0.0, 0.0);
-    const GREEN: Color = Color::srgb(0.0, 1.0, 0.0);
-}
+pub type RandomSource = Entropy<WyRand>;
+pub type GlobalRandom<'a> = GlobalEntropy<'a, WyRand>;
 
 fn main() {
     App::new()
@@ -40,47 +34,35 @@ fn main() {
                     ..default()
                 }),
         ) // fallback to nearest sampling
+        .add_plugins(FpsOverlayPlugin {
+            config: FpsOverlayConfig {
+                text_config: TextFont {
+                    // Here we define size of our overlay
+                    font_size: 42.0,
+                    // If we want, we can use a custom font
+                    font: default(),
+                    // We could also disable font smoothing,
+                    font_smoothing: FontSmoothing::default(),
+                    ..default()
+                },
+                // We can also change color of the overlay
+                text_color: OVERLAY_COLOR,
+                // We can also set the refresh interval for the FPS counter
+                refresh_interval: core::time::Duration::from_millis(100),
+                enabled: true,
+            },
+        })
         // foreign plugins
         .add_plugins(PixelCameraPlugin)
         .add_plugins(TilemapPlugin)
-        .add_plugins(FpsOverlayPlugin {
-                config: FpsOverlayConfig {
-                    text_config: TextFont {
-                        // Here we define size of our overlay
-                        font_size: 42.0,
-                        // If we want, we can use a custom font
-                        font: default(),
-                        // We could also disable font smoothing,
-                        font_smoothing: FontSmoothing::default(),
-                        ..default()
-                    },
-                    // We can also change color of the overlay
-                    text_color: OverlayColor::GREEN,
-                    // We can also set the refresh interval for the FPS counter
-                    refresh_interval: core::time::Duration::from_millis(100),
-                    enabled: true,
-                },
-            })
+        .add_plugins(EntropyPlugin::<WyRand>::default())
+        // Local Plugins
         .add_plugins(SkyPlugin)
-        .init_resource::<RandomSource>()
         .init_resource::<SpriteFolder>()
         .init_state::<AppState>()
-        .add_systems(Startup, print_monitor_size)
         .add_systems(Update, check_textures.run_if(in_state(AppState::Loading)))
         .add_systems(OnEnter(AppState::Playing), (setup_camera, spawn_floors))
         .run();
-}
-
-fn print_monitor_size(
-    winit_windows: NonSend<WinitWindows>,
-    window_entity: Single<Entity, With<PrimaryWindow>>,
-) {
-    if let Some(monitor) = winit_windows
-        .get_window(*window_entity)
-        .and_then(|a| a.current_monitor())
-    {
-        info!("{:?}", monitor.size());
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, States)]
@@ -88,15 +70,6 @@ enum AppState {
     #[default]
     Loading,
     Playing,
-}
-
-/// The source of randomness used by this example.
-#[derive(Resource)]
-struct RandomSource(SmallRng);
-impl Default for RandomSource {
-    fn default() -> Self {
-        Self(SmallRng::from_os_rng())
-    }
 }
 
 /// The asset folder holding all the sprite sheets.
@@ -187,6 +160,11 @@ fn spawn_section(commands: &mut Commands, origin: AxialPos, texture: Handle<Imag
         map_type,
         anchor: TilemapAnchor::Center,
         transform: Transform::from_translation(center.extend(0.)),
+        frustum_culling: FrustumCulling(true),
+        render_settings: TilemapRenderSettings {
+            y_sort: true,
+            ..Default::default()
+        },
         ..Default::default()
     });
 }
