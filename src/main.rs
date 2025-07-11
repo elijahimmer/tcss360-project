@@ -1,6 +1,9 @@
 mod consts;
 use consts::*;
 
+mod camera;
+use camera::CameraPlugin;
+
 mod sky;
 use sky::SkyPlugin;
 
@@ -12,7 +15,6 @@ use bevy::{
 
 use bevy::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, helpers::hex_grid::axial::AxialPos, prelude::*};
-use bevy_pixcam::{PixelCameraPlugin, PixelViewport, PixelZoom};
 
 use rand::SeedableRng;
 use wyrand::WyRand;
@@ -58,58 +60,54 @@ fn main() {
     app.add_plugins(FpsOverlayPlugin {
         config: FpsOverlayConfig {
             text_config: TextFont {
-                // Here we define size of our overlay
                 font_size: 42.0,
-                // If we want, we can use a custom font
                 font: default(),
-                // We could also disable font smoothing,
                 font_smoothing: FontSmoothing::default(),
                 ..default()
             },
-            // We can also change color of the overlay
             text_color: OVERLAY_COLOR,
-            // We can also set the refresh interval for the FPS counter
             refresh_interval: core::time::Duration::from_millis(100),
             enabled: true,
         },
     });
 
     // foreign plugins
-    app.add_plugins(PixelCameraPlugin)
-        .add_plugins(TilemapPlugin)
-        // Local Plugins
-        .add_plugins(SkyPlugin {
-            rng: RandomSource::from_rng(&mut rand),
-        })
-        //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
-        .add_systems(Startup, (setup_camera, spawn_floors))
-        .run();
+    app.add_plugins(TilemapPlugin);
+
+    // Local Plugins
+    app.add_plugins(SkyPlugin {
+        rng: RandomSource::from_rng(&mut rand),
+    })
+    .add_plugins(CameraPlugin)
+    //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
+    .add_systems(Startup, spawn_floors)
+    .run();
 }
 
-fn setup_camera(mut commands: Commands) {
-    commands.spawn((Camera2d, PixelZoom::Fixed(2), PixelViewport));
-}
+const AXIAL_DIRECTIONS: [AxialPos; 7] = [
+    AxialPos::new(0, 0),
+    AxialPos::new(1, 0),
+    AxialPos::new(0, 1),
+    AxialPos::new(0, -1),
+    AxialPos::new(-1, 0),
+    AxialPos::new(1, -1),
+    AxialPos::new(-1, 1),
+];
 
 fn spawn_floors(mut commands: Commands, asset_server: Res<AssetServer>) {
     let floor_texture = asset_server.load("embedded://assets/sprites/basic_sheet.png");
 
-    [
-        AxialPos::new(0, 0),
-        AxialPos::new(4, 0),
-        AxialPos::new(0, 4),
-        AxialPos::new(0, -4),
-        AxialPos::new(-4, 0),
-        AxialPos::new(4, -4),
-        AxialPos::new(-4, 4),
-    ]
-    .iter()
-    .for_each(|trans| {
-        spawn_section(&mut commands, *trans, floor_texture.clone());
-    });
+    AXIAL_DIRECTIONS
+        .iter()
+        .map(|p| AxialPos::new(p.q * 4, p.r * 4))
+        .for_each(|trans| {
+            spawn_section(&mut commands, trans, floor_texture.clone());
+        });
 }
 
 fn spawn_section(commands: &mut Commands, origin: AxialPos, texture: Handle<Image>) {
     let map_size = TilemapSize { x: 1, y: 2 };
+
     let center =
         (origin - AxialPos { q: 1, r: 0 }).center_in_world_row(&FLOOR_TILE_SIZE.as_vec2().into());
 

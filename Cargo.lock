@@ -774,15 +774,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_pixcam"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e731adde2459cf9b05343403f65165b9547a81ad6be788cee008b805cc6cee2"
-dependencies = [
- "bevy",
-]
-
-[[package]]
 name = "bevy_platform"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3550,7 +3541,6 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_ecs_tilemap",
- "bevy_pixcam",
  "rand 0.9.1",
  "wyrand",
 ]

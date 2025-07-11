@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use rand::Rng;
 
-const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 40, y: 24 };
-const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48., y: 52. };
+const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 100, y: 100 };
+const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48.0, y: 52.0 };
 const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
     x: SKY_TILE_SIZE.x,
     y: SKY_TILE_SIZE.y * 1.5,
@@ -16,7 +16,7 @@ const SKY_TILE_LAYER: f32 = -1.;
 const SKY_TILE_VARIENT_COUNT: u32 = 8;
 const SKY_TILE_ASSET_LOAD_PATH: &'static str = "embedded://assets/sprites/sky_sheet.png";
 
-///
+/// The plugin to
 pub struct SkyPlugin {
     /// The PRRNG for the sky to use.
     pub rng: RandomSource,
@@ -26,17 +26,18 @@ impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
         embed_asset!(app, "assets/sprites/sky_sheet.png");
 
-        app.init_resource::<SkyMovement>()
+        app.init_resource::<SkySettings>()
             .insert_resource(SkyRand(self.rng.clone()))
             .add_systems(Startup, spawn_sky)
             .add_systems(Update, sky_movement);
     }
 }
 
-/// Indicates a tile is a sky tile
+/// A marker to mark the Sky Tiles in the Sky TileMap
 #[derive(Component)]
 struct SkyTile;
 
+/// A marker to mark the Sky TileMap
 #[derive(Component)]
 struct SkyTileMap;
 
@@ -44,15 +45,15 @@ struct SkyTileMap;
 struct SkyRand(pub RandomSource);
 
 #[derive(Resource)]
-struct SkyMovement {
+struct SkySettings {
     /// The speed of movement in tiles per second, in axial coordinates.
     pub speed: Vec2,
 }
 
-impl Default for SkyMovement {
+impl Default for SkySettings {
     fn default() -> Self {
         Self {
-            speed: Vec2::new(5., 2.),
+            speed: Vec2::new(5.0, 2.0),
         }
     }
 }
@@ -108,7 +109,7 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
 ///
 fn sky_movement(
     time: Res<Time>,
-    sky_movement: ResMut<SkyMovement>,
+    sky_movement: ResMut<SkySettings>,
     mut rng: ResMut<SkyRand>,
     mut tilemap: Single<(&TileStorage, &TilemapSize, &mut Transform), With<SkyTileMap>>,
     mut tile_query: Query<&mut TileTextureIndex, With<SkyTile>>,
