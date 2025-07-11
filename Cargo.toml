@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 bevy_ecs_tilemap = { version = "0.16", features = ["atlas"] }
-bevy_pixcam = "0.16"
 rand = { version = "0.9", features = ["log"] }
 wyrand = "0.3"
 
@@ -61,7 +60,7 @@ opt-level = 3
 [features]
 default = []
 debug = [
-  "bevy/glam_assert",
+  "bevy/debug_glam_assert",
   "bevy/file_watcher",
   "bevy/dynamic_linking",
   "bevy/bevy_dev_tools"
