@@ -1,5 +1,5 @@
-mod consts;
-use consts::*;
+mod util;
+use util::*;
 
 mod camera;
 use camera::CameraPlugin;
@@ -17,29 +17,9 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, helpers::hex_grid::axial::AxialPos, prelude::*};
 
 use rand::SeedableRng;
-use wyrand::WyRand;
-
-pub type RandomSource = WyRand;
-//#[derive(Resource)]
-//pub struct GlobalRandom(RandomSource);
-
-#[macro_export]
-macro_rules! embed_asset {
-    ($app: ident, $path: expr) => {{
-        let embedded = $app
-            .world_mut()
-            .resource_mut::<::bevy::asset::io::embedded::EmbeddedAssetRegistry>();
-
-        embedded.insert_asset(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/", $path).into(),
-            ::std::path::Path::new($path),
-            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", $path)),
-        );
-    }};
-}
 
 fn main() {
-    let mut rand = WyRand::from_os_rng();
+    let mut rand = RandomSource::from_os_rng();
     let mut app = App::new();
 
     app.add_plugins(

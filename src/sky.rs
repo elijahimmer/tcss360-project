@@ -1,5 +1,5 @@
 //! The infinite sky implementation
-use crate::consts::*;
+use crate::util::*;
 use crate::{RandomSource, embed_asset};
 
 use bevy::prelude::*;
@@ -15,6 +15,8 @@ const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
 const SKY_TILE_LAYER: f32 = -1.;
 const SKY_TILE_VARIENT_COUNT: u32 = 8;
 const SKY_TILE_ASSET_LOAD_PATH: &'static str = "embedded://assets/sprites/sky_sheet.png";
+const AXIAL_TRANSLATION_MATRIX: Mat2 =
+    Mat2::from_cols_array(&[SQRT_3_2, 1.0 / 3.0, 0.0, 2.0 / 3.0]);
 
 /// The plugin to
 pub struct SkyPlugin {
@@ -26,7 +28,9 @@ impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
         embed_asset!(app, "assets/sprites/sky_sheet.png");
 
-        app.init_resource::<SkySettings>()
+        app.register_type::<SkyTile>()
+            .register_type::<SkyTileMap>()
+            .register_type::<SkySettings>()
             .insert_resource(SkyRand(self.rng.clone()))
             .add_systems(Startup, spawn_sky)
             .add_systems(Update, sky_movement);
@@ -34,28 +38,23 @@ impl Plugin for SkyPlugin {
 }
 
 /// A marker to mark the Sky Tiles in the Sky TileMap
-#[derive(Component)]
-struct SkyTile;
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct SkyTile;
 
 /// A marker to mark the Sky TileMap
-#[derive(Component)]
-struct SkyTileMap;
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct SkyTileMap;
 
 #[derive(Resource)]
 struct SkyRand(pub RandomSource);
 
-#[derive(Resource)]
-struct SkySettings {
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+pub struct SkySettings {
     /// The speed of movement in tiles per second, in axial coordinates.
     pub speed: Vec2,
-}
-
-impl Default for SkySettings {
-    fn default() -> Self {
-        Self {
-            speed: Vec2::new(5.0, 2.0),
-        }
-    }
 }
 
 /// Spawns the sky fitting the screen (to an extent).
@@ -71,6 +70,7 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
             commands.entity(tilemap_entity).with_children(|parent| {
                 let tile_entity = parent
                     .spawn((
+                        SkyTile,
                         TileBundle {
                             position: tile_pos,
                             tilemap_id: TilemapId(tilemap_entity),
@@ -79,7 +79,6 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
                             ),
                             ..Default::default()
                         },
-                        SkyTile,
                     ))
                     .id();
                 tile_storage.set(&tile_pos, tile_entity);
@@ -88,6 +87,7 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
     }
 
     commands.entity(tilemap_entity).insert((
+        SkyTileMap,
         TilemapBundle {
             grid_size: SKY_TILE_SIZE.into(),
             map_type: TilemapType::Hexagon(HexCoordSystem::Row),
@@ -99,8 +99,11 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
             transform: Transform::from_xyz(0., 0., SKY_TILE_LAYER),
             ..Default::default()
         },
-        SkyTileMap,
     ));
+
+    commands.insert_resource(SkySettings {
+        speed: Vec2::new(-5.0, -2.0),
+    });
 }
 
 /// Moves the sky with an illusion that it is indefinite.
@@ -111,24 +114,24 @@ fn sky_movement(
     time: Res<Time>,
     sky_movement: ResMut<SkySettings>,
     mut rng: ResMut<SkyRand>,
-    mut tilemap: Single<(&TileStorage, &TilemapSize, &mut Transform), With<SkyTileMap>>,
+    tilemap: Single<(&TileStorage, &TilemapSize, &mut Transform), With<SkyTileMap>>,
     mut tile_query: Query<&mut TileTextureIndex, With<SkyTile>>,
 ) {
-    let map_size: IVec2 = IVec2::new(tilemap.1.x as i32, tilemap.1.y as i32);
-    let tile_storage = tilemap.0;
+    let (tile_storage, map_size, mut transform) = tilemap.into_inner();
 
-    let old_translation = tilemap.2.translation.xy();
-    let mut new_translation =
-        AXIAL_TRANSLATION_MATRIX * sky_movement.speed * time.delta_secs() + old_translation;
+    let map_size: IVec2 = IVec2::new(map_size.x as i32, map_size.y as i32);
+
+    let new_translation = AXIAL_TRANSLATION_MATRIX * sky_movement.speed * time.delta_secs()
+        + transform.translation.xy();
 
     let tile_diff = (new_translation / SKY_TILE_SIZE_LOOP_THRESHOLD)
         .trunc()
         .as_ivec2();
 
     // only translate by the sky by the amount that was less than a whole tile.
-    new_translation -= tile_diff.as_vec2() * SKY_TILE_SIZE_LOOP_THRESHOLD;
+    let new_translation = new_translation - tile_diff.as_vec2() * SKY_TILE_SIZE_LOOP_THRESHOLD;
 
-    tilemap.2.translation = new_translation.extend(tilemap.2.translation.z);
+    transform.translation = new_translation.extend(transform.translation.z);
 
     if tile_diff == IVec2::ZERO {
         return;
@@ -179,7 +182,8 @@ fn sky_movement(
                 match tile_query.get_mut(new_tile_entity) {
                     Ok(mut new_tile_texture) => *new_tile_texture = curr_tile_texture,
                     Err(err) => {
-                        warn!("Failed to find to be replaced sky tile at {replace_pos} with {err}")
+                        warn!("Failed to find to be replaced sky tile at {replace_pos} with {err}");
+                        continue;
                     }
                 }
             }

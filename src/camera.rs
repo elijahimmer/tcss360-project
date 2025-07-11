@@ -1,18 +1,21 @@
-use bevy::prelude::*;
 use bevy::prelude::ops::powf;
+use bevy::prelude::*;
 
 /// The plugin to enable the camera
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, camera_setup)
+        app.register_type::<CameraMovementSettings>()
+            .register_type::<MainCamera>()
+            .add_systems(Startup, camera_setup)
             .add_systems(Update, (camera_movement, camera_zoom));
     }
 }
 
 /// The camera movement settings for the [`MainCamera`]
-#[derive(Resource)]
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
 struct CameraMovementSettings {
     /// The movement speed of the camera in in-game pixels per second
     move_speed: f32,
@@ -31,7 +34,8 @@ struct CameraMovementSettings {
 }
 
 /// The marker component to signify a camera is the main rendering camera
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 struct MainCamera;
 
 /// Sets up the main camera and it's settings
@@ -87,8 +91,14 @@ fn camera_zoom(
     };
 
     let scale = projection2d.scale
-        * powf(powf(settings.zoom_speed, time.delta_secs()), input.pressed(KeyCode::Comma) as u8 as f32)
-        * powf(powf(1.0/settings.zoom_speed, time.delta_secs()), input.pressed(KeyCode::Period) as u8 as f32);
+        * powf(
+            powf(settings.zoom_speed, time.delta_secs()),
+            input.pressed(KeyCode::Comma) as u8 as f32,
+        )
+        * powf(
+            powf(1.0 / settings.zoom_speed, time.delta_secs()),
+            input.pressed(KeyCode::Period) as u8 as f32,
+        );
 
     projection2d.scale = scale.clamp(settings.zoom_limit.x, settings.zoom_limit.y);
 }
