@@ -8,6 +8,8 @@ impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<CameraMovementSettings>()
             .register_type::<MainCamera>()
+            .init_resource::<CameraControls>()
+            .init_resource::<CameraMovementSettings>()
             .add_systems(Startup, camera_setup)
             .add_systems(Update, (camera_movement, camera_zoom));
     }
@@ -33,6 +35,43 @@ struct CameraMovementSettings {
     zoom_limit: Vec2,
 }
 
+impl Default for CameraMovementSettings {
+    fn default() -> Self {
+        Self {
+            move_speed: 300.0,
+            zoom_speed: 4.0,
+            move_area: Mat2::from_cols_array_2d(&[[-200.0, 200.0]; 2]),
+            zoom_limit: Vec2::new(0.25, 1.0),
+        }
+    }
+}
+
+/// The list of controls for each input
+/// TODO: Implement controller inputs maybe
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+struct CameraControls {
+    up: Vec<KeyCode>,
+    down: Vec<KeyCode>,
+    left: Vec<KeyCode>,
+    right: Vec<KeyCode>,
+    zoom_in: Vec<KeyCode>,
+    zoom_out: Vec<KeyCode>,
+}
+
+impl Default for CameraControls {
+    fn default() -> Self {
+        Self {
+            up: vec![KeyCode::ArrowUp, KeyCode::KeyW],
+            down: vec![KeyCode::ArrowDown, KeyCode::KeyS],
+            left: vec![KeyCode::ArrowLeft, KeyCode::KeyA],
+            right: vec![KeyCode::ArrowRight, KeyCode::KeyD],
+            zoom_in: vec![KeyCode::Comma],
+            zoom_out: vec![KeyCode::Period],
+        }
+    }
+}
+
 /// The marker component to signify a camera is the main rendering camera
 #[derive(Component, Reflect)]
 #[reflect(Component)]
@@ -48,15 +87,17 @@ fn camera_setup(mut commands: Commands) {
             scale: 0.5,
             ..OrthographicProjection::default_2d()
         }),
-        Transform::from_xyz(0., 0., 0.),
+        Transform::IDENTITY,
     ));
+}
 
-    commands.insert_resource(CameraMovementSettings {
-        move_speed: 300.0,
-        zoom_speed: 4.0,
-        move_area: Mat2::from_cols_array_2d(&[[-200.0, 200.0]; 2]),
-        zoom_limit: Vec2::new(0.25, 1.0),
-    });
+/// Returns a floating point number in the range [0, 1] representing if any of the keys are
+/// pressed
+fn sum_inputs(input: &Res<ButtonInput<KeyCode>>, keys: &[KeyCode]) -> f32 {
+    keys.iter()
+        .map(|key| input.pressed(*key) as u8)
+        .sum::<u8>()
+        .clamp(0, 1) as f32
 }
 
 /// Controls the camera's translational movement based
@@ -65,14 +106,15 @@ fn camera_movement(
     mut transform: Single<&mut Transform, With<MainCamera>>,
     input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
+    controls: Res<CameraControls>,
     time: Res<Time<Fixed>>,
 ) {
-    let movement = Vec2::Y * input.pressed(KeyCode::ArrowUp) as u8 as f32
-        + Vec2::NEG_Y * input.pressed(KeyCode::ArrowDown) as u8 as f32
-        + Vec2::NEG_X * input.pressed(KeyCode::ArrowLeft) as u8 as f32
-        + Vec2::X * input.pressed(KeyCode::ArrowRight) as u8 as f32;
+    let movement = Vec2::Y * sum_inputs(&input, &controls.up)
+        + Vec2::NEG_Y * sum_inputs(&input, &controls.down)
+        + Vec2::NEG_X * sum_inputs(&input, &controls.left)
+        + Vec2::X * sum_inputs(&input, &controls.right);
 
-    let movement = movement.normalize_or_zero() * settings.move_speed * time.delta_secs();
+    let movement = movement * time.delta_secs() * settings.move_speed;
 
     transform.translation = (transform.translation.xy() + movement)
         .clamp(settings.move_area.row(0), settings.move_area.row(1))
@@ -84,6 +126,7 @@ fn camera_zoom(
     mut projection: Single<&mut Projection, With<MainCamera>>,
     input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
+    controls: Res<CameraControls>,
     time: Res<Time<Fixed>>,
 ) {
     let Projection::Orthographic(ref mut projection2d) = **projection else {
@@ -93,11 +136,11 @@ fn camera_zoom(
     let scale = projection2d.scale
         * powf(
             powf(settings.zoom_speed, time.delta_secs()),
-            input.pressed(KeyCode::Comma) as u8 as f32,
+            sum_inputs(&input, &controls.zoom_in),
         )
         * powf(
             powf(1.0 / settings.zoom_speed, time.delta_secs()),
-            input.pressed(KeyCode::Period) as u8 as f32,
+            sum_inputs(&input, &controls.zoom_out),
         );
 
     projection2d.scale = scale.clamp(settings.zoom_limit.x, settings.zoom_limit.y);

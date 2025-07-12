@@ -67,18 +67,20 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
     commands.entity(tilemap_entity).with_children(|parent| {
         for x in 0..SKY_MAP_SIZE.x {
             for y in 0..SKY_MAP_SIZE.y {
-                let tile_pos = TilePos {x, y};
-                let id = parent.spawn((
-                    SkyTile,
-                    TileBundle {
-                        position: tile_pos,
-                        tilemap_id: TilemapId(tilemap_entity),
-                        texture_index: TileTextureIndex(
-                            rng.0.random_range(0..SKY_TILE_VARIENT_COUNT),
-                        ),
-                        ..Default::default()
-                    },
-                )).id();
+                let tile_pos = TilePos { x, y };
+                let id = parent
+                    .spawn((
+                        SkyTile,
+                        TileBundle {
+                            position: tile_pos,
+                            tilemap_id: TilemapId(tilemap_entity),
+                            texture_index: TileTextureIndex(
+                                rng.0.random_range(0..SKY_TILE_VARIENT_COUNT),
+                            ),
+                            ..Default::default()
+                        },
+                    ))
+                    .id();
                 tile_storage.set(&tile_pos, id);
             }
         }
