@@ -7,6 +7,7 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<CameraMovementSettings>()
+            .register_type::<CameraControls>()
             .register_type::<MainCamera>()
             .init_resource::<CameraControls>()
             .init_resource::<CameraMovementSettings>()
@@ -130,7 +131,7 @@ fn camera_zoom(
     time: Res<Time<Fixed>>,
 ) {
     let Projection::Orthographic(ref mut projection2d) = **projection else {
-        unreachable!("Only Orthographic Projection is supported not!");
+        unreachable!("Only Orthographic Projection is supported!");
     };
 
     let scale = projection2d.scale

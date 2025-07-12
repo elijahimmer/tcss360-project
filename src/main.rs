@@ -74,8 +74,9 @@ const AXIAL_DIRECTIONS: [AxialPos; 7] = [
     AxialPos::new(-1, 1),
 ];
 
+const BASIC_TILE_SHEET_PATH: &'static str = "embedded://assets/sprites/basic_sheet.png";
 fn spawn_floors(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let floor_texture = asset_server.load("embedded://assets/sprites/basic_sheet.png");
+    let floor_texture = asset_server.load(BASIC_TILE_SHEET_PATH);
 
     AXIAL_DIRECTIONS
         .iter()
