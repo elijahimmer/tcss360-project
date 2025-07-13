@@ -12,7 +12,10 @@ impl Plugin for CameraPlugin {
             .register_type::<MainCamera>()
             .init_resource::<CameraMovementSettings>()
             .add_systems(Startup, camera_setup)
-            .add_systems(Update, (camera_movement, camera_zoom))
+            .add_systems(
+                Update,
+                (camera_movement, camera_zoom).run_if(in_state(GameState::Game)),
+            )
             .add_systems(
                 Update,
                 controls_sync.run_if(
