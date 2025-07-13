@@ -123,13 +123,15 @@ impl Database {
 
         info!("Running database validation checks.");
         match validate_schema(&db.connection) {
-            Ok(()) => {},
+            Ok(()) => {}
             Err(err) => {
-                error!("Failed to validate SQLite Table with error {err}. Resorting to in memory database.");
+                error!(
+                    "Failed to validate SQLite Table with error {err}. Resorting to in memory database."
+                );
                 db.connection = sqlite::Connection::open_thread_safe(":memory:")?;
                 db.connection.execute(ADD_SCHEMA)?;
                 validate_schema(&db.connection).unwrap();
-            },
+            }
         };
         info!("Passed database validation checks.");
 
@@ -316,11 +318,15 @@ fn validate_table(
         let ctype = statement.read::<String, usize>(2).unwrap();
 
         if &name != expected_name {
-            error!("SQLite table `{table_name}` found column `{name}` yet expected column `{expected_name}`");
+            error!(
+                "SQLite table `{table_name}` found column `{name}` yet expected column `{expected_name}`"
+            );
             return Err(ValidateSchemaError::Invalid(table_name.into()));
         }
         if &ctype != expected_ctype {
-            error!("SQLite table `{table_name}` found column `{name}` of type `{ctype}` yet expected the type `{expected_ctype}`");
+            error!(
+                "SQLite table `{table_name}` found column `{name}` of type `{ctype}` yet expected the type `{expected_ctype}`"
+            );
             return Err(ValidateSchemaError::Invalid(table_name.into()));
         }
     }
