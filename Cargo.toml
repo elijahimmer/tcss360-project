@@ -5,8 +5,14 @@ edition = "2024"
 
 [dependencies]
 bevy_ecs_tilemap = { version = "0.16", features = ["atlas"] }
+const_format = "0.2"
+directories = "6"
 rand = { version = "0.9", features = ["log"] }
-wyrand = "0.3"
+ron = "0.10"
+serde = { version = "1", features = ["serde_derive", "alloc"] }
+sqlite = "0.37"
+thiserror = "2"
+wyrand = { version = "0.3", features = ["serde1"] }
 
 [dependencies.bevy]
 version = "0.16"
@@ -44,6 +50,7 @@ features = [
   "png",
   #"smaa_luts",
   "std",
+  "serialize",
   "sysinfo_plugin",
   #"tonemapping_luts",
   #"vorbis",

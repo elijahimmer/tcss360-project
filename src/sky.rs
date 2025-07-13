@@ -4,7 +4,7 @@ use crate::{RandomSource, embed_asset};
 
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 
 const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 100, y: 100 };
 const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48.0, y: 52.0 };
@@ -19,10 +19,7 @@ const AXIAL_TRANSLATION_MATRIX: Mat2 =
     Mat2::from_cols_array(&[SQRT_3_2, 1.0 / 3.0, 0.0, 2.0 / 3.0]);
 
 /// The plugin to
-pub struct SkyPlugin {
-    /// The PRRNG for the sky to use.
-    pub rng: RandomSource,
-}
+pub struct SkyPlugin;
 
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
@@ -31,7 +28,7 @@ impl Plugin for SkyPlugin {
         app.register_type::<SkyTile>()
             .register_type::<SkyTileMap>()
             .register_type::<SkySettings>()
-            .insert_resource(SkyRand(self.rng.clone()))
+            .insert_resource(SkyRand(RandomSource::from_os_rng()))
             .add_systems(Startup, spawn_sky)
             .add_systems(Update, sky_movement);
     }

@@ -35,6 +35,7 @@
             xorg.libXcursor
             xorg.libXi
             xorg.libXrandr
+            sqlite
           ];
         nativeBuildInputs = with pkgs; [
           pkg-config

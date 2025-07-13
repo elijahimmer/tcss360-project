@@ -1,3 +1,4 @@
+use crate::prelude::*;
 use bevy::prelude::ops::powf;
 use bevy::prelude::*;
 
@@ -9,7 +10,6 @@ impl Plugin for CameraPlugin {
         app.register_type::<CameraMovementSettings>()
             .register_type::<CameraControls>()
             .register_type::<MainCamera>()
-            .init_resource::<CameraControls>()
             .init_resource::<CameraMovementSettings>()
             .add_systems(Startup, camera_setup)
             .add_systems(Update, (camera_movement, camera_zoom));
@@ -47,30 +47,105 @@ impl Default for CameraMovementSettings {
     }
 }
 
+type Keybind = [Option<KeyCode>; 2];
+
 /// The list of controls for each input
 /// TODO: Implement controller inputs maybe
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
 struct CameraControls {
-    up: Vec<KeyCode>,
-    down: Vec<KeyCode>,
-    left: Vec<KeyCode>,
-    right: Vec<KeyCode>,
-    zoom_in: Vec<KeyCode>,
-    zoom_out: Vec<KeyCode>,
+    up: Keybind,
+    down: Keybind,
+    left: Keybind,
+    right: Keybind,
+    zoom_in: Keybind,
+    zoom_out: Keybind,
 }
 
-impl Default for CameraControls {
-    fn default() -> Self {
+impl FromDatabase for CameraControls {
+    fn from_database(database: &Database) -> Self {
         Self {
-            up: vec![KeyCode::ArrowUp, KeyCode::KeyW],
-            down: vec![KeyCode::ArrowDown, KeyCode::KeyS],
-            left: vec![KeyCode::ArrowLeft, KeyCode::KeyA],
-            right: vec![KeyCode::ArrowRight, KeyCode::KeyD],
-            zoom_in: vec![KeyCode::Comma],
-            zoom_out: vec![KeyCode::Period],
+            up: query_keybind_or_set(database, "move_up", DEFAULT_UP_CONTROLS),
+            down: query_keybind_or_set(database, "move_down", DEFAULT_DOWN_CONTROLS),
+            left: query_keybind_or_set(database, "move_left", DEFAULT_LEFT_CONTROLS),
+            right: query_keybind_or_set(database, "move_right", DEFAULT_RIGHT_CONTROLS),
+            zoom_in: query_keybind_or_set(database, "zoom_in", DEFAULT_ZOOM_IN_CONTROLS),
+            zoom_out: query_keybind_or_set(database, "zoom_out", DEFAULT_ZOOM_OUT_CONTROLS),
         }
     }
+}
+
+const DEFAULT_UP_CONTROLS: Keybind = [Some(KeyCode::ArrowUp), Some(KeyCode::KeyW)];
+const DEFAULT_DOWN_CONTROLS: Keybind = [Some(KeyCode::ArrowDown), Some(KeyCode::KeyS)];
+const DEFAULT_LEFT_CONTROLS: Keybind = [Some(KeyCode::ArrowLeft), Some(KeyCode::KeyA)];
+const DEFAULT_RIGHT_CONTROLS: Keybind = [Some(KeyCode::ArrowRight), Some(KeyCode::KeyD)];
+const DEFAULT_ZOOM_IN_CONTROLS: Keybind = [Some(KeyCode::Comma), None];
+const DEFAULT_ZOOM_OUT_CONTROLS: Keybind = [Some(KeyCode::Period), None];
+
+
+fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) -> Keybind {
+    query_keybind_or_set_fallible(database, keybind, default)
+        .inspect_err(|err| warn!("Failed to get keybind: '{keybind}' from sqlite with error: {err}"))
+        .unwrap_or(default)
+}
+
+fn query_keybind_or_set_fallible(database: &Database, keybind: &str, default: Keybind) -> Result<Keybind, sqlite::Error> {
+    Ok(match query_keybind(database, keybind)? {
+        Some(kb) => kb,
+        None => {
+            warn!("Keybind {keybind} not found in database! (this is expected first boot) Inserting now...");
+            set_keybind(database, keybind, default)?;
+
+            default
+        }
+    })
+}
+
+fn query_keybind(database: &Database, keybind: &str) -> Result<Option<Keybind>, sqlite::Error> {
+    let query = "SELECT key1,key2 FROM Keybinds WHERE keybind = :keybind";
+
+    let mut statement = database.connection.prepare(query)?;
+    statement.bind((":keybind", keybind))?;
+
+    if let sqlite::State::Done = statement.next()? {
+        return Ok(None);
+    }
+    assert_eq!(
+        statement.column_count(),
+        2,
+        "There should only be 3 columns in this table"
+    );
+
+    // read the value column index.
+    let key1 = statement.read::<Option<String>, usize>(0)?;
+    let key2 = statement.read::<Option<String>, usize>(1)?;
+
+    assert!(matches!(statement.next()?, sqlite::State::Done));
+
+    Ok(Some([
+        key1.and_then(|v| ron::from_str(&v).ok()),
+        key2.and_then(|v| ron::from_str(&v).ok()),
+    ]))
+}
+
+fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(), sqlite::Error> {
+    let query = "INSERT OR REPLACE INTO Keybinds VALUES (:keybind, :key1, :key2)";
+
+    let values =[
+        value[0].as_ref().and_then(|v| ron::to_string(v).ok()),
+        value[1].as_ref().and_then(|v| ron::to_string(v).ok())
+    ];
+
+    let mut statement = database.connection.prepare(query)?;
+    statement.bind((":keybind", keybind))?;
+    statement.bind_iter([
+        (":key1", values[0].as_deref()),
+        (":key2", values[1].as_deref())
+    ])?;
+
+    assert!(matches!(statement.next()?, sqlite::State::Done));
+
+    Ok(())
 }
 
 /// The marker component to signify a camera is the main rendering camera
@@ -79,7 +154,7 @@ impl Default for CameraControls {
 struct MainCamera;
 
 /// Sets up the main camera and it's settings
-fn camera_setup(mut commands: Commands) {
+fn camera_setup(mut commands: Commands, database: Res<Database>) {
     commands.spawn((
         MainCamera,
         Camera2d,
@@ -90,13 +165,15 @@ fn camera_setup(mut commands: Commands) {
         }),
         Transform::IDENTITY,
     ));
+
+    commands.insert_resource(CameraControls::from_database(&database));
 }
 
 /// Returns a floating point number in the range [0, 1] representing if any of the keys are
 /// pressed
-fn sum_inputs(input: &Res<ButtonInput<KeyCode>>, keys: &[KeyCode]) -> f32 {
-    keys.iter()
-        .map(|key| input.pressed(*key) as u8)
+fn sum_inputs(input: &Res<ButtonInput<KeyCode>>, keys: &[Option<KeyCode>]) -> f32 {
+    keys.into_iter()
+        .map(|key| key.is_some_and(|k| input.pressed(k)) as u8)
         .sum::<u8>()
         .clamp(0, 1) as f32
 }

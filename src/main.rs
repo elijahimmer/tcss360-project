@@ -1,11 +1,19 @@
-mod util;
-use util::*;
-
 mod camera;
-use camera::CameraPlugin;
-
+//mod save;
+mod database;
 mod sky;
-use sky::SkyPlugin;
+mod util;
+
+pub mod prelude {
+    pub type RandomSource = wyrand::WyRand;
+    pub use crate::camera::CameraPlugin;
+    //pub use crate::save::{Save, SavePlugin};
+    pub use crate::database::{Database, DatabasePlugin, FromDatabase};
+    pub use crate::sky::SkyPlugin;
+    pub use crate::util::*;
+}
+
+use prelude::*;
 
 #[cfg(feature = "debug")]
 use bevy::{
@@ -16,10 +24,7 @@ use bevy::{
 use bevy::prelude::*;
 use bevy_ecs_tilemap::{FrustumCulling, helpers::hex_grid::axial::AxialPos, prelude::*};
 
-use rand::SeedableRng;
-
 fn main() {
-    let mut rand = RandomSource::from_os_rng();
     let mut app = App::new();
 
     app.add_plugins(
@@ -52,16 +57,15 @@ fn main() {
     });
 
     // foreign plugins
-    app.add_plugins(TilemapPlugin);
-
-    // Local Plugins
-    app.add_plugins(SkyPlugin {
-        rng: RandomSource::from_rng(&mut rand),
-    })
-    .add_plugins(CameraPlugin)
-    //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
-    .add_systems(Startup, spawn_floors)
-    .run();
+    app.add_plugins(TilemapPlugin)
+        .add_plugins(DatabasePlugin)
+        // Local Plugins
+        .add_plugins(SkyPlugin)
+        //.add_plugins(SavePlugin)
+        .add_plugins(CameraPlugin)
+        //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
+        .add_systems(Startup, spawn_floors)
+        .run();
 }
 
 const AXIAL_DIRECTIONS: [AxialPos; 7] = [
