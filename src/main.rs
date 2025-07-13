@@ -8,7 +8,7 @@ pub mod prelude {
     pub type RandomSource = wyrand::WyRand;
     pub use crate::camera::CameraPlugin;
     //pub use crate::save::{Save, SavePlugin};
-    pub use crate::database::{Database, DatabasePlugin, FromDatabase};
+    pub use crate::database::{Database, DatabasePlugin, FromDatabase, ToDatabase};
     pub use crate::sky::SkyPlugin;
     pub use crate::util::*;
 }

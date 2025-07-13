@@ -13,10 +13,6 @@ type Version = i64;
 const DB_VERSION: Version = 1;
 const MIN_VERSION_MIGRATEABLE: Version = 1;
 
-const GET_VERSION: &str = r#"
-SELECT version FROM Version;
-"#;
-
 const ADD_SCHEMA: &str = formatcp!(
     r#"
 BEGIN TRANSACTION;
@@ -41,6 +37,7 @@ CREATE TABLE SaveGame(
     created DATETIME PRIMARY KEY,
     rand TEXT
 );
+
 COMMIT;
 "#
 );
@@ -60,6 +57,11 @@ impl Plugin for DatabasePlugin {
 pub trait FromDatabase {
     /// Cannot fail, must resort to defaults.
     fn from_database(database: &Database) -> Self;
+}
+
+pub trait ToDatabase {
+    type Error;
+    fn to_database(&self, database: &Database) -> Result<(), Self::Error>;
 }
 
 #[derive(Resource)]
@@ -205,7 +207,7 @@ pub enum OpenError {
 
 #[derive(Error, Debug)]
 pub enum CheckVersionError {
-    #[error("Version not found!")]
+    #[error("No version found in database!")]
     VersionNotFound,
     #[error("Version table incompatable! Assuming data is invalid.")]
     IncompatableVersionTable,
@@ -239,24 +241,29 @@ pub enum SetKvError {
 fn check_version(
     connection: &ConnectionThreadSafe,
 ) -> Result<VersionCompatability, CheckVersionError> {
-    let mut version_query = connection.prepare(GET_VERSION)?;
-    let mut res = version_query.iter();
+    let mut statement = connection.prepare("SELECT version FROM Version;")?;
 
-    let version = res.try_next()?;
-    let version = match version.as_deref() {
-        Some([sqlite::Value::Integer(version)]) => *version,
-        Some(_) => {
-            warn!("Version entry contains invalid values!");
-            return Err(CheckVersionError::IncompatableVersionTable.into());
-        }
-        Option::None => {
-            warn!("Version entry not found in table!");
-            return Err(CheckVersionError::VersionNotFound.into());
+    if !matches!(statement.next()?, sqlite::State::Row) {
+        error!("No version found in database!");
+        return Err(CheckVersionError::VersionNotFound);
+    }
+
+    if statement.column_count() != 1 {
+        warn!("Version entry contains invalid values!");
+        return Err(CheckVersionError::IncompatableVersionTable);
+    }
+
+    let version = match statement.read::<i64, usize>(0) {
+        Ok(v) => v,
+        Err(err) => {
+            warn!("Version entry not found in table with error: {err}");
+            return Err(CheckVersionError::VersionNotFound);
         }
     };
-    if let Some(_) = res.try_next()? {
+
+    if let sqlite::State::Row = statement.next()? {
         warn!("Malformed version table! Expected only 1 entry, found multiple!");
-        return Err(CheckVersionError::IncompatableVersionTable.into());
+        return Err(CheckVersionError::IncompatableVersionTable);
     }
 
     Ok(match version.cmp(&DB_VERSION) {
@@ -270,10 +277,7 @@ fn check_version(
 }
 
 fn validate_schema(connection: &ConnectionThreadSafe) -> Result<(), ValidateSchemaError> {
-    let mut statement = connection.prepare(
-        "PRAGMA integrity_check;
-        PRAGMA optimize;",
-    )?;
+    let mut statement = connection.prepare("PRAGMA integrity_check; PRAGMA optimize;")?;
     assert!(matches!(statement.next()?, sqlite::State::Row));
     assert!(matches!(statement.next()?, sqlite::State::Done));
 

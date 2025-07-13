@@ -12,9 +12,20 @@ impl Plugin for CameraPlugin {
             .register_type::<MainCamera>()
             .init_resource::<CameraMovementSettings>()
             .add_systems(Startup, camera_setup)
-            .add_systems(Update, (camera_movement, camera_zoom));
+            .add_systems(Update, (camera_movement, camera_zoom))
+            .add_systems(
+                Update,
+                controls_sync.run_if(
+                    resource_changed::<CameraControls>.and(not(resource_added::<CameraControls>)),
+                ),
+            );
     }
 }
+
+/// The marker component to signify a camera is the main rendering camera
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct MainCamera;
 
 /// The camera movement settings for the [`MainCamera`]
 #[derive(Resource, Reflect)]
@@ -62,6 +73,7 @@ struct CameraControls {
     zoom_out: Keybind,
 }
 
+// TODO: Do this in a single transaction maybe? (don't know if it matters)
 impl FromDatabase for CameraControls {
     fn from_database(database: &Database) -> Self {
         Self {
@@ -72,6 +84,21 @@ impl FromDatabase for CameraControls {
             zoom_in: query_keybind_or_set(database, "zoom_in", DEFAULT_ZOOM_IN_CONTROLS),
             zoom_out: query_keybind_or_set(database, "zoom_out", DEFAULT_ZOOM_OUT_CONTROLS),
         }
+    }
+}
+
+// TODO: Do this in a single transaction maybe? (don't know if it matters)
+impl ToDatabase for CameraControls {
+    type Error = sqlite::Error;
+    fn to_database(&self, database: &Database) -> Result<(), Self::Error> {
+        set_keybind(database, "move_up", self.up)?;
+        set_keybind(database, "move_down", self.down)?;
+        set_keybind(database, "move_left", self.left)?;
+        set_keybind(database, "move_right", self.right)?;
+        set_keybind(database, "zoom_in", self.zoom_in)?;
+        set_keybind(database, "zoom_out", self.zoom_out)?;
+
+        Ok(())
     }
 }
 
@@ -97,7 +124,7 @@ fn query_keybind_or_set_fallible(
 ) -> Result<Keybind, sqlite::Error> {
     Ok(match query_keybind(database, keybind)? {
         Some(kb) => kb,
-        None => {
+        Option::None => {
             warn!(
                 "Keybind {keybind} not found in database! (this is expected first boot) Inserting now..."
             );
@@ -155,10 +182,14 @@ fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(),
     Ok(())
 }
 
-/// The marker component to signify a camera is the main rendering camera
-#[derive(Component, Reflect)]
-#[reflect(Component)]
-struct MainCamera;
+fn controls_sync(_commands: Commands, database: Res<Database>, controls: Res<CameraControls>) {
+    match controls.to_database(&database) {
+        Ok(()) => {}
+        Err(err) => {
+            warn!("Failed to sync controls to database with: {err}");
+        }
+    };
+}
 
 /// Sets up the main camera and it's settings
 fn camera_setup(mut commands: Commands, database: Res<Database>) {
@@ -192,7 +223,7 @@ fn camera_movement(
     input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
     controls: Res<CameraControls>,
-    time: Res<Time<Fixed>>,
+    time: Res<Time>,
 ) {
     let movement = Vec2::Y * sum_inputs(&input, &controls.up)
         + Vec2::NEG_Y * sum_inputs(&input, &controls.down)
@@ -212,7 +243,7 @@ fn camera_zoom(
     input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
     controls: Res<CameraControls>,
-    time: Res<Time<Fixed>>,
+    time: Res<Time>,
 ) {
     let Projection::Orthographic(ref mut projection2d) = **projection else {
         unreachable!("Only Orthographic Projection is supported!");
