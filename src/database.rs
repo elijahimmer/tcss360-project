@@ -125,12 +125,11 @@ impl Database {
         match validate_schema(&db.connection) {
             Ok(()) => {}
             Err(err) => {
+                error!("Failed to validate SQLite Table with error {err}.");
                 error!(
-                    "Failed to validate SQLite Table with error {err}. Resorting to in memory database."
+                    "Ask the developers to help get your data back, or on how to delete it to proceed!"
                 );
-                db.connection = sqlite::Connection::open_thread_safe(":memory:")?;
-                db.connection.execute(ADD_SCHEMA)?;
-                validate_schema(&db.connection).unwrap();
+                return Err(OpenError::ValidationFailed(err));
             }
         };
         info!("Passed database validation checks.");
@@ -196,8 +195,10 @@ impl Database {
 pub enum OpenError {
     #[error("Version Incompatable found version `{0}`!")]
     IncompatableVersion(Version),
-    #[error("Version Check Failed")]
+    #[error("Version check failed with `{0}`")]
     CheckVersionError(#[from] CheckVersionError),
+    #[error("Schema valdation failed with `{0}`")]
+    ValidationFailed(#[from] ValidateSchemaError),
     #[error("SQLite error occured: `{0}`")]
     SqliteError(#[from] sqlite::Error),
 }
@@ -340,7 +341,7 @@ fn validate_table(
 }
 
 #[derive(Error, Debug)]
-enum ValidateSchemaError {
+pub enum ValidateSchemaError {
     #[error("SQLite table '{0}' failed validation!")]
     Invalid(Box<str>),
     #[error("SQLite error occured: `{0}`")]
