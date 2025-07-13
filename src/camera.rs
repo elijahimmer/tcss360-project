@@ -82,18 +82,25 @@ const DEFAULT_RIGHT_CONTROLS: Keybind = [Some(KeyCode::ArrowRight), Some(KeyCode
 const DEFAULT_ZOOM_IN_CONTROLS: Keybind = [Some(KeyCode::Comma), None];
 const DEFAULT_ZOOM_OUT_CONTROLS: Keybind = [Some(KeyCode::Period), None];
 
-
 fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) -> Keybind {
     query_keybind_or_set_fallible(database, keybind, default)
-        .inspect_err(|err| warn!("Failed to get keybind: '{keybind}' from sqlite with error: {err}"))
+        .inspect_err(|err| {
+            warn!("Failed to get keybind: '{keybind}' from sqlite with error: {err}")
+        })
         .unwrap_or(default)
 }
 
-fn query_keybind_or_set_fallible(database: &Database, keybind: &str, default: Keybind) -> Result<Keybind, sqlite::Error> {
+fn query_keybind_or_set_fallible(
+    database: &Database,
+    keybind: &str,
+    default: Keybind,
+) -> Result<Keybind, sqlite::Error> {
     Ok(match query_keybind(database, keybind)? {
         Some(kb) => kb,
         None => {
-            warn!("Keybind {keybind} not found in database! (this is expected first boot) Inserting now...");
+            warn!(
+                "Keybind {keybind} not found in database! (this is expected first boot) Inserting now..."
+            );
             set_keybind(database, keybind, default)?;
 
             default
@@ -131,16 +138,16 @@ fn query_keybind(database: &Database, keybind: &str) -> Result<Option<Keybind>, 
 fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(), sqlite::Error> {
     let query = "INSERT OR REPLACE INTO Keybinds VALUES (:keybind, :key1, :key2)";
 
-    let values =[
+    let values = [
         value[0].as_ref().and_then(|v| ron::to_string(v).ok()),
-        value[1].as_ref().and_then(|v| ron::to_string(v).ok())
+        value[1].as_ref().and_then(|v| ron::to_string(v).ok()),
     ];
 
     let mut statement = database.connection.prepare(query)?;
     statement.bind((":keybind", keybind))?;
     statement.bind_iter([
         (":key1", values[0].as_deref()),
-        (":key2", values[1].as_deref())
+        (":key2", values[1].as_deref()),
     ])?;
 
     assert!(matches!(statement.next()?, sqlite::State::Done));

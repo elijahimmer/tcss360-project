@@ -45,11 +45,6 @@ COMMIT;
 "#
 );
 
-const SCHEMA_VALIDATE: &str = r#"
-PRAGMA integrity_check;
-PRAGMA optimize;
-"#;
-
 pub struct DatabasePlugin;
 
 impl Plugin for DatabasePlugin {
@@ -76,9 +71,20 @@ impl Database {
     pub fn open() -> Result<Self, OpenError> {
         let path = get_default_db_path();
         let exists = path.exists();
-        let mut db = Self {
-            // TODO: Open in memory when unable to open file otherwise.
-            connection: sqlite::Connection::open_thread_safe(&path)?,
+        let mut db = {
+            let connection = match sqlite::Connection::open_thread_safe(&path) {
+                Ok(conn) => conn,
+                Err(err) => {
+                    warn!(
+                        "Failed to open database at '{}' with error: {err}",
+                        path.display()
+                    );
+                    sqlite::Connection::open_thread_safe(":memory:")?
+                }
+            };
+            Self {
+                connection: connection,
+            }
         };
 
         if exists {
@@ -116,7 +122,15 @@ impl Database {
         }
 
         info!("Running database validation checks.");
-        db.connection.execute(SCHEMA_VALIDATE)?;
+        match validate_schema(&db.connection) {
+            Ok(()) => {},
+            Err(err) => {
+                error!("Failed to validate SQLite Table with error {err}. Resorting to in memory database.");
+                db.connection = sqlite::Connection::open_thread_safe(":memory:")?;
+                db.connection.execute(ADD_SCHEMA)?;
+                validate_schema(&db.connection).unwrap();
+            },
+        };
         info!("Passed database validation checks.");
 
         Ok(db)
@@ -156,7 +170,11 @@ impl Database {
             .transpose()?)
     }
 
-    pub fn set_kv_direct<T: sqlite::BindableWithIndex>(&self, key: &str, value: T) -> Result<(), sqlite::Error> {
+    pub fn set_kv_direct<T: sqlite::BindableWithIndex>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<(), sqlite::Error> {
         let query = "INSERT INTO KeyValue VALUES (:key, :value)";
         let mut statement = self.connection.prepare(query)?;
         statement.bind((":key", key))?;
@@ -228,7 +246,7 @@ fn check_version(
             warn!("Version entry contains invalid values!");
             return Err(CheckVersionError::IncompatableVersionTable.into());
         }
-        None => {
+        Option::None => {
             warn!("Version entry not found in table!");
             return Err(CheckVersionError::VersionNotFound.into());
         }
@@ -248,6 +266,81 @@ fn check_version(
     })
 }
 
+fn validate_schema(connection: &ConnectionThreadSafe) -> Result<(), ValidateSchemaError> {
+    let mut statement = connection.prepare(
+        "PRAGMA integrity_check;
+        PRAGMA optimize;",
+    )?;
+    assert!(matches!(statement.next()?, sqlite::State::Row));
+    assert!(matches!(statement.next()?, sqlite::State::Done));
+
+    validate_table(connection, "Version", &[("version", "INTEGER")])?;
+    validate_table(
+        connection,
+        "KeyValue",
+        &[("key", "VARCHAR(32)"), ("value", "TEXT")],
+    )?;
+    validate_table(
+        connection,
+        "Keybinds",
+        &[
+            ("keybind", "VARCHAR(16)"),
+            ("key1", "MEDIUMINTEGER"),
+            ("key2", "MEDIUMINTEGER"),
+        ],
+    )?;
+    validate_table(
+        connection,
+        "SaveGame",
+        &[("created", "DATETIME"), ("rand", "TEXT")],
+    )?;
+
+    Ok(())
+}
+
+fn validate_table(
+    connection: &ConnectionThreadSafe,
+    table_name: &str,
+    contents: &[(&str, &str)],
+) -> Result<(), ValidateSchemaError> {
+    let query = format!("PRAGMA table_info({table_name});");
+    let mut statement = connection.prepare(query)?;
+
+    for (expected_name, expected_ctype) in contents.iter() {
+        if let sqlite::State::Done = statement.next()? {
+            error!("SQLite table `{table_name}` missing column 'expected_name'!");
+            return Err(ValidateSchemaError::Invalid(table_name.into()));
+        }
+
+        let name = statement.read::<String, usize>(1).unwrap();
+        let ctype = statement.read::<String, usize>(2).unwrap();
+
+        if &name != expected_name {
+            error!("SQLite table `{table_name}` found column `{name}` yet expected column `{expected_name}`");
+            return Err(ValidateSchemaError::Invalid(table_name.into()));
+        }
+        if &ctype != expected_ctype {
+            error!("SQLite table `{table_name}` found column `{name}` of type `{ctype}` yet expected the type `{expected_ctype}`");
+            return Err(ValidateSchemaError::Invalid(table_name.into()));
+        }
+    }
+
+    if !matches!(statement.next()?, sqlite::State::Done) {
+        let next_column = statement.read::<String, usize>(1)?;
+        error!("SQLite table `{table_name}` has unexpected column '{next_column}'");
+    };
+
+    Ok(())
+}
+
+#[derive(Error, Debug)]
+enum ValidateSchemaError {
+    #[error("SQLite table '{0}' failed validation!")]
+    Invalid(Box<str>),
+    #[error("SQLite error occured: `{0}`")]
+    SqliteError(#[from] sqlite::Error),
+}
+
 fn get_default_db_path() -> Box<Path> {
     let project_dir = ProjectDirs::from("com", "TeamCounterSpell", "TCSS360-Project");
     let config_dir = match project_dir.as_ref().map(|d| d.config_dir()) {
@@ -261,7 +354,7 @@ fn get_default_db_path() -> Box<Path> {
                 .inspect_err(|e| warn!("Failed to create config directory with: {e}. Resorting to using local directory!"))
                 .unwrap_or(Path::new(""))
         }
-        None => Path::new(""),
+        Option::None => Path::new(""),
     };
 
     config_dir.join("data.sqlite").into()
