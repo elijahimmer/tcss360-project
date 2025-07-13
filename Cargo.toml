@@ -22,7 +22,7 @@ features = [
   #"animation",
   "async_executor",
   "bevy_asset",
-  #"bevy_audio",
+  "bevy_audio",
   #"bevy_color",
   "bevy_core_pipeline",
   #"bevy_gilrs",

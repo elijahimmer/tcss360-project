@@ -38,3 +38,8 @@ WIP
 
 ### Windows
 WIP
+
+## Licensing
+Everything in this project is licensed under the MIT license, except that which is
+in the `assets/fonts` directory.
+

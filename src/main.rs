@@ -1,7 +1,8 @@
 mod camera;
-//mod save;
+mod controls;
 mod database;
-mod main_menu;
+mod menu;
+//mod save;
 mod sky;
 mod util;
 
@@ -12,12 +13,13 @@ pub mod prelude {
     #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
     pub enum GameState {
         #[default]
-        MainMenu,
+        Menu,
         Game,
     }
 
     pub use crate::camera::CameraPlugin;
-    pub use crate::main_menu::MainMenuPlugin;
+    pub use crate::controls::{Controls, ControlsPlugin};
+    pub use crate::menu::MenuPlugin;
     //pub use crate::save::{Save, SavePlugin};
     pub use crate::database::{Database, DatabasePlugin, FromDatabase, ToDatabase};
     pub use crate::sky::SkyPlugin;
@@ -73,7 +75,8 @@ fn main() {
         .init_state::<GameState>()
         // Local Plugins
         .add_plugins(DatabasePlugin)
-        .add_plugins(MainMenuPlugin)
+        .add_plugins(ControlsPlugin)
+        .add_plugins(MenuPlugin)
         .add_plugins(SkyPlugin)
         //.add_plugins(SavePlugin)
         .add_plugins(CameraPlugin)

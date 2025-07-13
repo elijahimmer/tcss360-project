@@ -8,19 +8,13 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<CameraMovementSettings>()
-            .register_type::<CameraControls>()
+            .register_type::<Controls>()
             .register_type::<MainCamera>()
             .init_resource::<CameraMovementSettings>()
             .add_systems(Startup, camera_setup)
             .add_systems(
                 Update,
                 (camera_movement, camera_zoom).run_if(in_state(GameState::Game)),
-            )
-            .add_systems(
-                Update,
-                controls_sync.run_if(
-                    resource_changed::<CameraControls>.and(not(resource_added::<CameraControls>)),
-                ),
             );
     }
 }
@@ -61,141 +55,8 @@ impl Default for CameraMovementSettings {
     }
 }
 
-type Keybind = [Option<KeyCode>; 2];
-
-/// The list of controls for each input
-/// TODO: Implement controller inputs maybe
-#[derive(Resource, Reflect)]
-#[reflect(Resource)]
-struct CameraControls {
-    up: Keybind,
-    down: Keybind,
-    left: Keybind,
-    right: Keybind,
-    zoom_in: Keybind,
-    zoom_out: Keybind,
-}
-
-// TODO: Do this in a single transaction maybe? (don't know if it matters)
-impl FromDatabase for CameraControls {
-    fn from_database(database: &Database) -> Self {
-        Self {
-            up: query_keybind_or_set(database, "move_up", DEFAULT_UP_CONTROLS),
-            down: query_keybind_or_set(database, "move_down", DEFAULT_DOWN_CONTROLS),
-            left: query_keybind_or_set(database, "move_left", DEFAULT_LEFT_CONTROLS),
-            right: query_keybind_or_set(database, "move_right", DEFAULT_RIGHT_CONTROLS),
-            zoom_in: query_keybind_or_set(database, "zoom_in", DEFAULT_ZOOM_IN_CONTROLS),
-            zoom_out: query_keybind_or_set(database, "zoom_out", DEFAULT_ZOOM_OUT_CONTROLS),
-        }
-    }
-}
-
-// TODO: Do this in a single transaction maybe? (don't know if it matters)
-impl ToDatabase for CameraControls {
-    type Error = sqlite::Error;
-    fn to_database(&self, database: &Database) -> Result<(), Self::Error> {
-        set_keybind(database, "move_up", self.up)?;
-        set_keybind(database, "move_down", self.down)?;
-        set_keybind(database, "move_left", self.left)?;
-        set_keybind(database, "move_right", self.right)?;
-        set_keybind(database, "zoom_in", self.zoom_in)?;
-        set_keybind(database, "zoom_out", self.zoom_out)?;
-
-        Ok(())
-    }
-}
-
-const DEFAULT_UP_CONTROLS: Keybind = [Some(KeyCode::ArrowUp), Some(KeyCode::KeyW)];
-const DEFAULT_DOWN_CONTROLS: Keybind = [Some(KeyCode::ArrowDown), Some(KeyCode::KeyS)];
-const DEFAULT_LEFT_CONTROLS: Keybind = [Some(KeyCode::ArrowLeft), Some(KeyCode::KeyA)];
-const DEFAULT_RIGHT_CONTROLS: Keybind = [Some(KeyCode::ArrowRight), Some(KeyCode::KeyD)];
-const DEFAULT_ZOOM_IN_CONTROLS: Keybind = [Some(KeyCode::Comma), None];
-const DEFAULT_ZOOM_OUT_CONTROLS: Keybind = [Some(KeyCode::Period), None];
-
-fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) -> Keybind {
-    query_keybind_or_set_fallible(database, keybind, default)
-        .inspect_err(|err| {
-            warn!("Failed to get keybind: '{keybind}' from sqlite with error: {err}")
-        })
-        .unwrap_or(default)
-}
-
-fn query_keybind_or_set_fallible(
-    database: &Database,
-    keybind: &str,
-    default: Keybind,
-) -> Result<Keybind, sqlite::Error> {
-    Ok(match query_keybind(database, keybind)? {
-        Some(kb) => kb,
-        Option::None => {
-            warn!(
-                "Keybind {keybind} not found in database! (this is expected first boot) Inserting now..."
-            );
-            set_keybind(database, keybind, default)?;
-
-            default
-        }
-    })
-}
-
-fn query_keybind(database: &Database, keybind: &str) -> Result<Option<Keybind>, sqlite::Error> {
-    let query = "SELECT key1,key2 FROM Keybinds WHERE keybind = :keybind";
-
-    let mut statement = database.connection.prepare(query)?;
-    statement.bind((":keybind", keybind))?;
-
-    if let sqlite::State::Done = statement.next()? {
-        return Ok(None);
-    }
-    assert_eq!(
-        statement.column_count(),
-        2,
-        "There should only be 3 columns in this table"
-    );
-
-    // read the value column index.
-    let key1 = statement.read::<Option<String>, usize>(0)?;
-    let key2 = statement.read::<Option<String>, usize>(1)?;
-
-    assert!(matches!(statement.next()?, sqlite::State::Done));
-
-    Ok(Some([
-        key1.and_then(|v| ron::from_str(&v).ok()),
-        key2.and_then(|v| ron::from_str(&v).ok()),
-    ]))
-}
-
-fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(), sqlite::Error> {
-    let query = "INSERT OR REPLACE INTO Keybinds VALUES (:keybind, :key1, :key2)";
-
-    let values = [
-        value[0].as_ref().and_then(|v| ron::to_string(v).ok()),
-        value[1].as_ref().and_then(|v| ron::to_string(v).ok()),
-    ];
-
-    let mut statement = database.connection.prepare(query)?;
-    statement.bind((":keybind", keybind))?;
-    statement.bind_iter([
-        (":key1", values[0].as_deref()),
-        (":key2", values[1].as_deref()),
-    ])?;
-
-    assert!(matches!(statement.next()?, sqlite::State::Done));
-
-    Ok(())
-}
-
-fn controls_sync(_commands: Commands, database: Res<Database>, controls: Res<CameraControls>) {
-    match controls.to_database(&database) {
-        Ok(()) => {}
-        Err(err) => {
-            warn!("Failed to sync controls to database with: {err}");
-        }
-    };
-}
-
 /// Sets up the main camera and it's settings
-fn camera_setup(mut commands: Commands, database: Res<Database>) {
+fn camera_setup(mut commands: Commands) {
     commands.spawn((
         MainCamera,
         Camera2d,
@@ -206,8 +67,6 @@ fn camera_setup(mut commands: Commands, database: Res<Database>) {
         }),
         Transform::IDENTITY,
     ));
-
-    commands.insert_resource(CameraControls::from_database(&database));
 }
 
 /// Returns a floating point number in the range [0, 1] representing if any of the keys are
@@ -225,13 +84,13 @@ fn camera_movement(
     mut transform: Single<&mut Transform, With<MainCamera>>,
     input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
-    controls: Res<CameraControls>,
+    controls: Res<Controls>,
     time: Res<Time>,
 ) {
-    let movement = Vec2::Y * sum_inputs(&input, &controls.up)
-        + Vec2::NEG_Y * sum_inputs(&input, &controls.down)
-        + Vec2::NEG_X * sum_inputs(&input, &controls.left)
-        + Vec2::X * sum_inputs(&input, &controls.right);
+    let movement = Vec2::Y * sum_inputs(&input, &controls.move_up)
+        + Vec2::NEG_Y * sum_inputs(&input, &controls.move_down)
+        + Vec2::NEG_X * sum_inputs(&input, &controls.move_left)
+        + Vec2::X * sum_inputs(&input, &controls.move_right);
 
     let movement = movement * time.delta_secs() * settings.move_speed;
 
@@ -245,7 +104,7 @@ fn camera_zoom(
     mut projection: Single<&mut Projection, With<MainCamera>>,
     input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
-    controls: Res<CameraControls>,
+    controls: Res<Controls>,
     time: Res<Time>,
 ) {
     let Projection::Orthographic(ref mut projection2d) = **projection else {
