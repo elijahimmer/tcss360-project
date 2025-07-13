@@ -35,12 +35,12 @@
             xorg.libXcursor
             xorg.libXi
             xorg.libXrandr
-            sqlite
           ];
         nativeBuildInputs = with pkgs; [
           pkg-config
           # For debugging around vulkan
           vulkan-tools
+          sqlite
         ];
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
       };
