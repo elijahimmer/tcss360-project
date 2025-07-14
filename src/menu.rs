@@ -34,12 +34,12 @@ impl Plugin for MenuPlugin {
             .add_systems(OnExit(MenuState::Controls), despawn_screen::<OnControls>)
             .add_systems(
                 Update,
-                (controls_menu_action, update_scroll_position)
-                    .run_if(in_state(MenuState::Controls)),
+                controls_menu_action.run_if(in_state(MenuState::Controls)),
             )
             .add_systems(
                 Update,
-                (menu_action, button_system).run_if(in_state(GameState::Menu)),
+                (update_scroll_position, menu_action, button_system)
+                    .run_if(in_state(GameState::Menu)),
             );
     }
 }
@@ -425,8 +425,6 @@ enum ControlsButtonAction {
     ResetAll,
 }
 
-const CONTROLS_GRID_WIDTH: u16 = 8;
-
 fn controls_settings_enter(
     mut commands: Commands,
     font: Res<CurrentFont>,
@@ -470,13 +468,11 @@ fn controls_settings_enter(
                     width: Val::Percent(100.0),
                     height: Val::Percent(85.0),
                     margin: UiRect::all(Val::Px(10.0)),
+                    padding: UiRect::all(Val::Px(10.0)),
 
                     align_items: AlignItems::Center,
                     justify_items: JustifyItems::Center,
                     row_gap: Val::Px(10.0),
-
-                    grid_template_columns: RepeatedGridTrack::flex(CONTROLS_GRID_WIDTH, 5.0),
-                    display: Display::Grid,
 
                     overflow: Overflow::scroll_y(),
                     flex_direction: FlexDirection::Column,
@@ -528,63 +524,76 @@ fn controls_settings_row(
     keys: Keybind,
 ) {
     builder
-        .spawn((
-            Node {
-                width: Val::Vw(100.0 / CONTROLS_GRID_WIDTH as f32),
-                min_height: Val::Px(60.0),
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            Label,
-            AccessibilityNode(Accessible::new(Role::ListItem)),
-        ))
+        .spawn(Node::default())
         .insert(Pickable {
             should_block_lower: false,
             ..default()
         })
         .with_children(|builder| {
-            builder.spawn((
-                Text::new(control.to_string()),
-                TextColor(TITLE_COLOR),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 33.0,
+            builder
+                .spawn((
+                    Node {
+                        width: Val::Px(100.0),
+                        min_height: Val::Px(60.0),
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    Label,
+                    AccessibilityNode(Accessible::new(Role::ListItem)),
+                ))
+                .insert(Pickable {
+                    should_block_lower: false,
                     ..default()
-                },
-            ));
-        });
+                })
+                .with_children(|builder| {
+                    builder
+                        .spawn((
+                            Text::new(control.to_string()),
+                            TextColor(TITLE_COLOR),
+                            TextFont {
+                                font: font.clone(),
+                                font_size: 33.0,
+                                ..default()
+                            },
+                        ))
+                        .insert(Pickable {
+                            should_block_lower: false,
+                            ..default()
+                        });
+                });
 
-    [
-        (
-            keybind_to_string(keys[0]),
-            ControlsButtonAction::SetControl(control, 0),
-            GridPlacement::span(2),
-        ),
-        (
-            "Clear".into(),
-            ControlsButtonAction::ClearControl(control, 0),
-            GridPlacement::span(1),
-        ),
-        (
-            keybind_to_string(keys[1]),
-            ControlsButtonAction::SetControl(control, 1),
-            GridPlacement::span(2),
-        ),
-        (
-            "Clear".into(),
-            ControlsButtonAction::ClearControl(control, 1),
-            GridPlacement::span(1),
-        ),
-        (
-            "Reset".into(),
-            ControlsButtonAction::ResetControl(control),
-            GridPlacement::span(1),
-        ),
-    ]
-    .into_iter()
-    .for_each(|(name, action, grid)| {
-        controls_settings_button(builder, font.clone(), name, action, grid)
-    })
+            [
+                (
+                    keybind_to_string(keys[0]),
+                    ControlsButtonAction::SetControl(control, 0),
+                    Val::Px(150.0),
+                ),
+                (
+                    "Clear".into(),
+                    ControlsButtonAction::ClearControl(control, 0),
+                    Val::Px(75.0),
+                ),
+                (
+                    keybind_to_string(keys[1]),
+                    ControlsButtonAction::SetControl(control, 1),
+                    Val::Px(150.0),
+                ),
+                (
+                    "Clear".into(),
+                    ControlsButtonAction::ClearControl(control, 1),
+                    Val::Px(75.0),
+                ),
+                (
+                    "Reset".into(),
+                    ControlsButtonAction::ResetControl(control),
+                    Val::Px(75.0),
+                ),
+            ]
+            .into_iter()
+            .for_each(|(name, action, width)| {
+                controls_settings_button(builder, font.clone(), name, action, width)
+            })
+        });
 }
 
 fn controls_settings_button(
@@ -592,21 +601,24 @@ fn controls_settings_button(
     font: Handle<Font>,
     name: Box<str>,
     action: ControlsButtonAction,
-    grid_column: GridPlacement,
+    width: Val,
 ) {
     let button_node = Node {
-        width: Val::Vw(100.0 / CONTROLS_GRID_WIDTH as f32 * grid_column.get_span().unwrap() as f32),
-        height: Val::Px(CONTROLS_LINE_HEIGHT),
-        margin: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(0.0), Val::Px(0.0)),
+        margin: UiRect::px(2.0, 2.0, 0.0, 0.0),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
         overflow: Overflow::clip(),
-        grid_column,
+        width,
         ..default()
     };
 
     builder
-        .spawn((Button, button_node.clone(), action))
+        .spawn((
+            Button,
+            button_node.clone(),
+            action,
+            AccessibilityNode(Accessible::new(Role::ListItem)),
+        ))
         .insert(Pickable {
             should_block_lower: false,
             ..default()
@@ -621,6 +633,7 @@ fn controls_settings_button(
                         ..default()
                     },
                     TextColor(TEXT_COLOR),
+                    Label,
                 ))
                 .insert(Pickable {
                     should_block_lower: false,
@@ -659,27 +672,16 @@ pub fn update_scroll_position(
     mut mouse_wheel_events: EventReader<MouseWheel>,
     hover_map: Res<HoverMap>,
     mut scrolled_node_query: Query<&mut ScrollPosition>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
     for mouse_wheel_event in mouse_wheel_events.read() {
-        let (mut dx, mut dy) = match mouse_wheel_event.unit {
-            MouseScrollUnit::Line => (
-                mouse_wheel_event.x * CONTROLS_LINE_HEIGHT,
-                mouse_wheel_event.y * CONTROLS_LINE_HEIGHT,
-            ),
-            MouseScrollUnit::Pixel => (mouse_wheel_event.x, mouse_wheel_event.y),
+        let dy = match mouse_wheel_event.unit {
+            MouseScrollUnit::Line => mouse_wheel_event.y * CONTROLS_LINE_HEIGHT,
+            MouseScrollUnit::Pixel => mouse_wheel_event.y,
         };
-
-        if keyboard_input.pressed(KeyCode::ControlLeft)
-            || keyboard_input.pressed(KeyCode::ControlRight)
-        {
-            std::mem::swap(&mut dx, &mut dy);
-        }
 
         for (_pointer, pointer_map) in hover_map.iter() {
             for (entity, _hit) in pointer_map.iter() {
                 if let Ok(mut scroll_position) = scrolled_node_query.get_mut(*entity) {
-                    scroll_position.offset_x -= dx;
                     scroll_position.offset_y -= dy;
                 }
             }
