@@ -39,6 +39,7 @@ pub struct Controls {
     pub zoom_in: Keybind,
     pub zoom_out: Keybind,
     pub pause: Keybind,
+    pub select: Keybind,
 }
 
 impl Controls {
@@ -53,6 +54,7 @@ impl Controls {
             Control::ZoomIn => &mut self.zoom_in,
             Control::ZoomOut => &mut self.zoom_out,
             Control::Pause => &mut self.pause,
+            Control::Select => &mut self.select,
         })[entry] = bind;
     }
 
@@ -65,6 +67,7 @@ impl Controls {
             Control::ZoomIn => self.zoom_in = DEFAULT_ZOOM_IN_CONTROLS,
             Control::ZoomOut => self.zoom_out = DEFAULT_ZOOM_OUT_CONTROLS,
             Control::Pause => self.pause = DEFAULT_PAUSE_CONTROLS,
+            Control::Select => self.pause = DEFAULT_SELECT_CONTROLS,
         }
     }
 
@@ -83,6 +86,7 @@ impl Default for Controls {
             zoom_in: DEFAULT_ZOOM_IN_CONTROLS,
             zoom_out: DEFAULT_ZOOM_OUT_CONTROLS,
             pause: DEFAULT_PAUSE_CONTROLS,
+            select: DEFAULT_SELECT_CONTROLS,
         }
     }
 }
@@ -98,6 +102,7 @@ impl FromDatabase for Controls {
             zoom_in: query_keybind_or_set(database, "zoom_in", DEFAULT_ZOOM_IN_CONTROLS),
             zoom_out: query_keybind_or_set(database, "zoom_out", DEFAULT_ZOOM_OUT_CONTROLS),
             pause: query_keybind_or_set(database, "pause", DEFAULT_PAUSE_CONTROLS),
+            select: query_keybind_or_set(database, "select", DEFAULT_SELECT_CONTROLS),
         }
     }
 }
@@ -113,6 +118,7 @@ impl ToDatabase for Controls {
         set_keybind(database, "zoom_in", self.zoom_in)?;
         set_keybind(database, "zoom_out", self.zoom_out)?;
         set_keybind(database, "pause", self.pause)?;
+        set_keybind(database, "select", self.select)?;
 
         Ok(())
     }
@@ -149,6 +155,7 @@ impl Iterator for IntoIter {
                 Control::ZoomIn => (Control::ZoomIn, self.controls.zoom_in),
                 Control::ZoomOut => (Control::ZoomOut, self.controls.zoom_out),
                 Control::Pause => (Control::Pause, self.controls.pause),
+                Control::Select => (Control::Select, self.controls.select),
             };
 
             self.current = control.next();
@@ -168,6 +175,7 @@ pub enum Control {
     ZoomIn,
     ZoomOut,
     Pause,
+    Select,
 }
 
 impl Control {
@@ -179,7 +187,8 @@ impl Control {
             Control::MoveRight => Some(Control::ZoomIn),
             Control::ZoomIn => Some(Control::ZoomOut),
             Control::ZoomOut => Some(Control::Pause),
-            Control::Pause => None,
+            Control::Pause => Some(Control::Select),
+            Control::Select => None,
         }
     }
 
@@ -192,6 +201,7 @@ impl Control {
             Control::ZoomIn => "Zoom In",
             Control::ZoomOut => "Zoom Out",
             Control::Pause => "Pause",
+            Control::Select => "Select",
         }
     }
 }
@@ -203,6 +213,8 @@ const DEFAULT_RIGHT_CONTROLS: Keybind = [Some(KeyCode::ArrowRight), Some(KeyCode
 const DEFAULT_ZOOM_IN_CONTROLS: Keybind = [Some(KeyCode::Comma), None];
 const DEFAULT_ZOOM_OUT_CONTROLS: Keybind = [Some(KeyCode::Period), None];
 const DEFAULT_PAUSE_CONTROLS: Keybind = [Some(KeyCode::Escape), Some(KeyCode::Pause)];
+// TODO: Change this to mouse button left.
+const DEFAULT_SELECT_CONTROLS: Keybind = [Some(KeyCode::KeyA), None];
 
 fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) -> Keybind {
     query_keybind_or_set_fallible(database, keybind, default)

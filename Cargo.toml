@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# TODO: Update accesskit when bevy does.
+accesskit = { version = "0.18.0", features = ["enumn", "serde"] }
 bevy_ecs_tilemap = { version = "0.16", features = ["atlas"] }
 const_format = "0.2"
 directories = "6"
@@ -32,15 +34,15 @@ features = [
   "bevy_log",
   #"bevy_mesh_picking_backend",
   #"bevy_pbr",
-  #"bevy_picking",
+  "bevy_picking",
   "bevy_render",
   #"bevy_scene",
   "bevy_sprite",
-  #"bevy_sprite_picking_backend",
+  "bevy_sprite_picking_backend",
   "bevy_state",
   "bevy_text",
   "bevy_ui",
-  #"bevy_ui_picking_backend",
+  "bevy_ui_picking_backend",
   "bevy_window",
   "bevy_winit",
   #"custom_cursor",

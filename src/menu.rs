@@ -2,9 +2,15 @@ use crate::controls::{Control, keybind_to_string};
 use crate::embed_asset;
 use crate::prelude::*;
 //use bevy::audio::Volume;
-use bevy::ecs::relationship::RelatedSpawnerCommands;
-use bevy::ecs::spawn::SpawnIter;
-use bevy::prelude::*;
+use bevy::{
+    a11y::AccessibilityNode,
+    ecs::{relationship::RelatedSpawnerCommands, spawn::SpawnIter},
+    input::mouse::{MouseScrollUnit, MouseWheel},
+    picking::hover::HoverMap,
+    prelude::*,
+};
+
+use accesskit::{Node as Accessible, Role};
 
 const FONT_PATH: &str = "embedded://assets/fonts/Ithaca/Ithaca-LVB75.ttf";
 
@@ -28,7 +34,8 @@ impl Plugin for MenuPlugin {
             .add_systems(OnExit(MenuState::Controls), despawn_screen::<OnControls>)
             .add_systems(
                 Update,
-                controls_menu_action.run_if(in_state(MenuState::Controls)),
+                (controls_menu_action, update_scroll_position)
+                    .run_if(in_state(MenuState::Controls)),
             )
             .add_systems(
                 Update,
@@ -459,16 +466,18 @@ fn controls_settings_enter(
             builder
                 .spawn(Node {
                     width: Val::Percent(100.0),
-                    height: Val::Percent(80.0),
-                    flex_direction: FlexDirection::Column,
-                    margin: UiRect::all(Val::Px(10.)),
+                    height: Val::Percent(90.0),
+                    margin: UiRect::all(Val::Px(10.0)),
 
-                    align_items: AlignItems::Start,
+                    align_items: AlignItems::Center,
                     justify_items: JustifyItems::Center,
-                    row_gap: Val::Px(10.),
+                    row_gap: Val::Px(10.0),
 
                     grid_template_columns: RepeatedGridTrack::flex(6, 5.0),
                     display: Display::Grid,
+
+                    overflow: Overflow::scroll_y(),
+                    flex_direction: FlexDirection::Column,
                     ..default()
                 })
                 .with_children(|builder| {
@@ -481,13 +490,13 @@ fn controls_settings_enter(
                 .spawn((
                     Node {
                         width: Val::Percent(100.0),
-                        height: Val::Percent(10.0),
-                        align_items: AlignItems::Center,
                         position_type: PositionType::Absolute,
+                        align_items: AlignItems::Start,
+                        justify_items: JustifyItems::Center,
                         align_self: AlignSelf::End,
                         ..default()
                     },
-                    BackgroundColor(BACKGROUND_COLOR)
+                    BackgroundColor(BACKGROUND_COLOR),
                 ))
                 .with_children(|builder| {
                     builder.spawn((
@@ -514,26 +523,33 @@ fn controls_settings_row(
     control: Control,
     keys: Keybind,
 ) {
-    builder.spawn((
-        Node {
-            width: Val::Px(200.0),
-            height: Val::Px(65.0),
-            margin: UiRect::all(Val::Px(5.0)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-
-            ..default()
-        },
-        children![(
-            Text::new(control.to_string()),
-            TextColor(TITLE_COLOR),
-            TextFont {
-                font: font.clone(),
-                font_size: 33.0,
+    builder
+        .spawn((
+            Node {
+                width: Val::Vw(100.0 / 6.0),
+                min_height: Val::Px(65.0),
+                align_items: AlignItems::Center,
                 ..default()
-            }
-        )],
-    ));
+            },
+            Label,
+            AccessibilityNode(Accessible::new(Role::ListItem)),
+
+        ))
+        .insert(Pickable {
+            should_block_lower: false,
+            ..default()
+        })
+        .with_children(|builder| {
+            builder.spawn((
+                Text::new(control.to_string()),
+                TextColor(TITLE_COLOR),
+                TextFont {
+                    font: font.clone(),
+                    font_size: 33.0,
+                    ..default()
+                },
+            ));
+        });
 
     [
         (
@@ -565,29 +581,37 @@ fn controls_settings_button(
     action: ControlsButtonAction,
 ) {
     let button_node = Node {
-        width: Val::Px(200.0),
+        width: Val::Vw(100.0 / 6.0),
         height: Val::Px(65.0),
-        margin: UiRect::all(Val::Px(5.0)),
+        margin: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(0.0), Val::Px(0.0)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
+        overflow: Overflow::clip(),
         ..default()
     };
 
-    builder.spawn((
-        Button,
-        button_node.clone(),
-        action,
-        BackgroundColor(NORMAL_BUTTON),
-        children![(
-            Text::new(name),
-            TextFont {
-                font: font.clone(),
-                font_size: 33.0,
-                ..default()
-            },
-            TextColor(TEXT_COLOR),
-        )],
-    ));
+    builder
+        .spawn((Button, button_node.clone(), action))
+        .insert(Pickable {
+            should_block_lower: false,
+            ..default()
+        })
+        .with_children(|builder| {
+            builder
+                .spawn((
+                    Text::new(name),
+                    TextFont {
+                        font: font.clone(),
+                        font_size: 33.0,
+                        ..default()
+                    },
+                    TextColor(TEXT_COLOR),
+                ))
+                .insert(Pickable {
+                    should_block_lower: false,
+                    ..default()
+                });
+        });
 }
 
 fn controls_menu_action(
@@ -609,6 +633,40 @@ fn controls_menu_action(
                 }
                 ControlsButtonAction::ResetControl(control) => controls.reset_control(*control),
                 ControlsButtonAction::ResetAll => controls.reset_controls(),
+            }
+        }
+    }
+}
+
+const LINE_HEIGHT: f32 = 21.;
+
+pub fn update_scroll_position(
+    mut mouse_wheel_events: EventReader<MouseWheel>,
+    hover_map: Res<HoverMap>,
+    mut scrolled_node_query: Query<&mut ScrollPosition>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+) {
+    for mouse_wheel_event in mouse_wheel_events.read() {
+        let (mut dx, mut dy) = match mouse_wheel_event.unit {
+            MouseScrollUnit::Line => (
+                mouse_wheel_event.x * LINE_HEIGHT,
+                mouse_wheel_event.y * LINE_HEIGHT,
+            ),
+            MouseScrollUnit::Pixel => (mouse_wheel_event.x, mouse_wheel_event.y),
+        };
+
+        if keyboard_input.pressed(KeyCode::ControlLeft)
+            || keyboard_input.pressed(KeyCode::ControlRight)
+        {
+            std::mem::swap(&mut dx, &mut dy);
+        }
+
+        for (_pointer, pointer_map) in hover_map.iter() {
+            for (entity, _hit) in pointer_map.iter() {
+                if let Ok(mut scroll_position) = scrolled_node_query.get_mut(*entity) {
+                    scroll_position.offset_x -= dx;
+                    scroll_position.offset_y -= dy;
+                }
             }
         }
     }

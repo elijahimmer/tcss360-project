@@ -14,7 +14,9 @@ impl Plugin for CameraPlugin {
             .add_systems(Startup, camera_setup)
             .add_systems(
                 Update,
-                (camera_movement, camera_zoom).run_if(in_state(GameState::Game)),
+                (pause_game, (camera_movement, camera_zoom))
+                    .chain()
+                    .run_if(in_state(GameState::Game)),
             );
     }
 }
@@ -76,6 +78,16 @@ fn sum_inputs(input: &Res<ButtonInput<KeyCode>>, keys: &[Option<KeyCode>]) -> f3
         .map(|key| key.is_some_and(|k| input.pressed(k)) as u8)
         .sum::<u8>()
         .clamp(0, 1) as f32
+}
+
+fn pause_game(mut commands: Commands, input: Res<ButtonInput<KeyCode>>, controls: Res<Controls>) {
+    if controls
+        .pause
+        .into_iter()
+        .any(|key| key.is_some_and(|k| input.pressed(k)))
+    {
+        commands.set_state(GameState::Menu);
+    }
 }
 
 /// Controls the camera's translational movement based
