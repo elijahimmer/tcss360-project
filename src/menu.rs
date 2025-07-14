@@ -1,7 +1,8 @@
-use crate::controls::Control;
+use crate::controls::{Control, keybind_to_string};
 use crate::embed_asset;
 use crate::prelude::*;
 //use bevy::audio::Volume;
+use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::ecs::spawn::SpawnIter;
 use bevy::prelude::*;
 
@@ -18,35 +19,20 @@ impl Plugin for MenuPlugin {
             .add_systems(OnEnter(MenuState::Main), main_enter)
             .add_systems(OnExit(MenuState::Main), despawn_screen::<OnMenuScreen>)
             .add_systems(OnEnter(MenuState::Settings), settings_enter)
+            .add_systems(OnExit(MenuState::Settings), despawn_screen::<OnSettings>)
+            .add_systems(OnEnter(MenuState::Display), display_settings_enter)
+            .add_systems(OnExit(MenuState::Display), despawn_screen::<OnDisplay>)
+            .add_systems(OnEnter(MenuState::Sound), sound_settings_enter)
+            .add_systems(OnExit(MenuState::Sound), despawn_screen::<OnSoundScreen>)
+            .add_systems(OnEnter(MenuState::Controls), controls_settings_enter)
+            .add_systems(OnExit(MenuState::Controls), despawn_screen::<OnControls>)
             .add_systems(
-                OnExit(MenuState::Settings),
-                despawn_screen::<OnSettingsMenuScreen>,
-            )
-            .add_systems(OnEnter(MenuState::SettingsDisplay), display_settings_enter)
-            .add_systems(
-                OnExit(MenuState::SettingsDisplay),
-                despawn_screen::<OnDisplaySettingsMenuScreen>,
-            )
-            .add_systems(OnEnter(MenuState::SettingsSound), sound_settings_enter)
-            .add_systems(
-                OnExit(MenuState::SettingsSound),
-                despawn_screen::<OnSoundSettingsMenuScreen>,
-            )
-            .add_systems(
-                OnEnter(MenuState::SettingsControls),
-                controls_settings_enter,
-            )
-            .add_systems(
-                OnExit(MenuState::SettingsControls),
-                despawn_screen::<OnControlsSettingsMenuScreen>,
+                Update,
+                controls_menu_action.run_if(in_state(MenuState::Controls)),
             )
             .add_systems(
                 Update,
                 (menu_action, button_system).run_if(in_state(GameState::Menu)),
-            )
-            .add_systems(
-                Update,
-                controls_menu_action.run_if(in_state(MenuState::SettingsControls)),
             );
     }
 }
@@ -57,49 +43,49 @@ enum MenuState {
     Disabled,
     Main,
     Settings,
-    SettingsDisplay,
-    SettingsSound,
-    SettingsControls,
+    Display,
+    Sound,
+    Controls,
 }
 
 #[derive(Component)]
 struct OnMenuScreen;
 
 #[derive(Component)]
-struct OnSettingsMenuScreen;
+struct OnSettings;
 
 #[derive(Component)]
-struct OnDisplaySettingsMenuScreen;
+struct OnDisplay;
 
 #[derive(Component)]
-struct OnSoundSettingsMenuScreen;
+struct OnSoundScreen;
 
 #[derive(Component)]
-struct OnControlsSettingsMenuScreen;
+struct OnControls;
 
 #[derive(Component)]
 enum MenuButtonAction {
     Play,
+    MainMenu,
     Settings,
-    SettingsControls,
-    SettingsDisplay,
-    SettingsSound,
-    BackToSettings,
-    BackToMenu,
+    Controls,
+    Display,
+    Sound,
     Quit,
 }
 
 #[derive(Resource)]
-struct Font(Handle<bevy::prelude::Font>);
+struct CurrentFont(Handle<Font>);
 
 fn load_font(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.insert_resource(Font(assets.load(FONT_PATH)));
+    commands.insert_resource(CurrentFont(assets.load(FONT_PATH)));
 }
 
 fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
     menu_state.set(MenuState::Main);
 }
 
+const BACKGROUND_COLOR: Color = Color::srgba_u8(0x26, 0x23, 0x3a, 0xaa);
 const TITLE_COLOR: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
 const TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
 const NORMAL_BUTTON: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
@@ -147,17 +133,16 @@ fn menu_action(
                     menu_state.set(MenuState::Disabled);
                 }
                 MenuButtonAction::Settings => menu_state.set(MenuState::Settings),
-                MenuButtonAction::SettingsControls => menu_state.set(MenuState::SettingsControls),
-                MenuButtonAction::SettingsDisplay => menu_state.set(MenuState::SettingsDisplay),
-                MenuButtonAction::SettingsSound => menu_state.set(MenuState::SettingsSound),
-                MenuButtonAction::BackToSettings => menu_state.set(MenuState::Settings),
-                MenuButtonAction::BackToMenu => menu_state.set(MenuState::Main),
+                MenuButtonAction::Controls => menu_state.set(MenuState::Controls),
+                MenuButtonAction::Display => menu_state.set(MenuState::Display),
+                MenuButtonAction::Sound => menu_state.set(MenuState::Sound),
+                MenuButtonAction::MainMenu => menu_state.set(MenuState::Main),
             }
         }
     }
 }
 
-fn main_enter(mut commands: Commands, font: Res<Font>) {
+fn main_enter(mut commands: Commands, font: Res<CurrentFont>) {
     // Common style for all buttons on the screen
     let button_node = Node {
         width: Val::Px(300.0),
@@ -250,7 +235,7 @@ fn main_enter(mut commands: Commands, font: Res<Font>) {
     ));
 }
 
-fn settings_enter(mut commands: Commands, font: Res<Font>) {
+fn settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -277,7 +262,7 @@ fn settings_enter(mut commands: Commands, font: Res<Font>) {
             justify_content: JustifyContent::Center,
             ..default()
         },
-        OnSettingsMenuScreen,
+        OnSettings,
         children![(
             Node {
                 flex_direction: FlexDirection::Column,
@@ -286,10 +271,10 @@ fn settings_enter(mut commands: Commands, font: Res<Font>) {
             },
             Children::spawn(SpawnIter(
                 [
-                    (MenuButtonAction::SettingsControls, "Controls"),
-                    (MenuButtonAction::SettingsDisplay, "Display"),
-                    (MenuButtonAction::SettingsSound, "Sound"),
-                    (MenuButtonAction::BackToMenu, "Back"),
+                    (MenuButtonAction::Controls, "Controls"),
+                    (MenuButtonAction::Display, "Display"),
+                    (MenuButtonAction::Sound, "Sound"),
+                    (MenuButtonAction::MainMenu, "Back"),
                 ]
                 .into_iter()
                 .map(move |(action, text)| {
@@ -306,7 +291,7 @@ fn settings_enter(mut commands: Commands, font: Res<Font>) {
     ));
 }
 
-fn display_settings_enter(mut commands: Commands, font: Res<Font>) {
+fn display_settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -333,7 +318,7 @@ fn display_settings_enter(mut commands: Commands, font: Res<Font>) {
             justify_content: JustifyContent::Center,
             ..default()
         },
-        OnDisplaySettingsMenuScreen,
+        OnDisplay,
         children![(
             Node {
                 flex_direction: FlexDirection::Column,
@@ -344,14 +329,17 @@ fn display_settings_enter(mut commands: Commands, font: Res<Font>) {
                 Button,
                 button_node.clone(),
                 BackgroundColor(NORMAL_BUTTON),
-                MenuButtonAction::BackToSettings,
+                MenuButtonAction::Settings,
                 children![(Text::new("Back"), button_text_style.clone())],
             )]
         )],
     ));
 }
 
-fn sound_settings_enter(mut commands: Commands, font: Res<Font> /*volume: Res<Volume>*/) {
+fn sound_settings_enter(
+    mut commands: Commands,
+    font: Res<CurrentFont>, /*volume: Res<Volume>*/
+) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -378,7 +366,7 @@ fn sound_settings_enter(mut commands: Commands, font: Res<Font> /*volume: Res<Vo
             justify_content: JustifyContent::Center,
             ..default()
         },
-        OnSoundSettingsMenuScreen,
+        OnSoundScreen,
         children![(
             Node {
                 flex_direction: FlexDirection::Column,
@@ -414,7 +402,7 @@ fn sound_settings_enter(mut commands: Commands, font: Res<Font> /*volume: Res<Vo
                 (
                     Button,
                     button_node,
-                    MenuButtonAction::BackToSettings,
+                    MenuButtonAction::Settings,
                     children![(Text::new("Back"), button_text_style)]
                 )
             ]
@@ -432,18 +420,19 @@ enum ControlsButtonAction {
 
 fn controls_settings_enter(
     mut commands: Commands,
-    font: Res<Font>,
+    font: Res<CurrentFont>,
     controls: Res<Controls>,
     // volume: Res<Volume>,
 ) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
-        margin: UiRect::all(Val::Px(20.0)),
+        margin: UiRect::all(Val::Px(5.0)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
         ..default()
     };
+
     let button_text_style = (
         TextFont {
             font: font.0.clone(),
@@ -454,93 +443,150 @@ fn controls_settings_enter(
     );
 
     //let button_node_clone = button_node.clone();
-    commands.spawn((
+    commands
+        .spawn((
+            Node {
+                display: Display::Flex,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Start,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            OnControls,
+        ))
+        .with_children(|builder| {
+            builder
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(80.0),
+                    flex_direction: FlexDirection::Column,
+                    margin: UiRect::all(Val::Px(10.)),
+
+                    align_items: AlignItems::Start,
+                    justify_items: JustifyItems::Center,
+                    row_gap: Val::Px(10.),
+
+                    grid_template_columns: RepeatedGridTrack::flex(6, 5.0),
+                    display: Display::Grid,
+                    ..default()
+                })
+                .with_children(|builder| {
+                    controls.clone().into_iter().for_each(|(control, keys)| {
+                        controls_settings_row(builder, font.0.clone(), control, keys)
+                    })
+                });
+
+            builder
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(10.0),
+                        align_items: AlignItems::Center,
+                        position_type: PositionType::Absolute,
+                        align_self: AlignSelf::End,
+                        ..default()
+                    },
+                    BackgroundColor(BACKGROUND_COLOR)
+                ))
+                .with_children(|builder| {
+                    builder.spawn((
+                        Button,
+                        button_node.clone(),
+                        BackgroundColor(NORMAL_BUTTON),
+                        ControlsButtonAction::ResetAll,
+                        children![(Text::new("ResetAll"), button_text_style.clone())],
+                    ));
+                    builder.spawn((
+                        Button,
+                        button_node.clone(),
+                        BackgroundColor(NORMAL_BUTTON),
+                        MenuButtonAction::Settings,
+                        children![(Text::new("Back"), button_text_style.clone())],
+                    ));
+                });
+        });
+}
+
+fn controls_settings_row(
+    builder: &mut RelatedSpawnerCommands<'_, ChildOf>,
+    font: Handle<Font>,
+    control: Control,
+    keys: Keybind,
+) {
+    builder.spawn((
         Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            align_items: AlignItems::Center,
+            width: Val::Px(200.0),
+            height: Val::Px(65.0),
+            margin: UiRect::all(Val::Px(5.0)),
             justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+
             ..default()
         },
-        OnControlsSettingsMenuScreen,
-        children![
-            (
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                Children::spawn(SpawnIter(controls.clone().into_iter().map({
-                    let bn = button_node.clone();
-                    let bs = button_text_style.clone();
-                    move |(control_name, control_bind)| {
-                        (
-                            Node {
-                                width: Val::Percent(80.0),
-                                height: Val::Px(65.0),
-                                margin: UiRect::all(Val::Px(20.0)),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            Children::spawn(SpawnIter(
-                                [
-                                    (
-                                        ControlsButtonAction::SetControl(control_name, 0),
-                                        format!("{:?}", control_bind[0]),
-                                    ),
-                                    (
-                                        ControlsButtonAction::ClearControl(control_name, 0),
-                                        "Clear".to_string(),
-                                    ),
-                                    (
-                                        ControlsButtonAction::SetControl(control_name, 1),
-                                        format!("{:?}", control_bind[1]),
-                                    ),
-                                    (
-                                        ControlsButtonAction::ClearControl(control_name, 1),
-                                        "Clear".to_string(),
-                                    ),
-                                    (
-                                        ControlsButtonAction::ResetControl(control_name),
-                                        "Reset Both".to_string(),
-                                    ),
-                                ]
-                                .into_iter()
-                                .map({
-                                    let bn = bn.clone();
-                                    let bs = bs.clone();
-                                    move |(action, text)| {
-                                        (
-                                            Button,
-                                            bn.clone(),
-                                            BackgroundColor(NORMAL_BUTTON),
-                                            action,
-                                            children![(Text::new(text), bs.clone())],
-                                        )
-                                    }
-                                }),
-                            )),
-                        )
-                    }
-                })))
-            ),
-            (
-                Button,
-                button_node.clone(),
-                BackgroundColor(NORMAL_BUTTON),
-                ControlsButtonAction::ResetAll,
-                children![(Text::new("ResetAll"), button_text_style.clone())],
-            ),
-            (
-                Button,
-                button_node.clone(),
-                BackgroundColor(NORMAL_BUTTON),
-                MenuButtonAction::BackToSettings,
-                children![(Text::new("Back"), button_text_style.clone())],
-            )
-        ],
+        children![(
+            Text::new(control.to_string()),
+            TextColor(TITLE_COLOR),
+            TextFont {
+                font: font.clone(),
+                font_size: 33.0,
+                ..default()
+            }
+        )],
+    ));
+
+    [
+        (
+            keybind_to_string(keys[0]),
+            ControlsButtonAction::SetControl(control, 0),
+        ),
+        (
+            "Clear".into(),
+            ControlsButtonAction::ClearControl(control, 0),
+        ),
+        (
+            keybind_to_string(keys[1]),
+            ControlsButtonAction::SetControl(control, 1),
+        ),
+        (
+            "Clear".into(),
+            ControlsButtonAction::ClearControl(control, 1),
+        ),
+        ("Reset".into(), ControlsButtonAction::ResetControl(control)),
+    ]
+    .into_iter()
+    .for_each(|(name, action)| controls_settings_button(builder, font.clone(), name, action))
+}
+
+fn controls_settings_button(
+    builder: &mut RelatedSpawnerCommands<'_, ChildOf>,
+    font: Handle<Font>,
+    name: Box<str>,
+    action: ControlsButtonAction,
+) {
+    let button_node = Node {
+        width: Val::Px(200.0),
+        height: Val::Px(65.0),
+        margin: UiRect::all(Val::Px(5.0)),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    };
+
+    builder.spawn((
+        Button,
+        button_node.clone(),
+        action,
+        BackgroundColor(NORMAL_BUTTON),
+        children![(
+            Text::new(name),
+            TextFont {
+                font: font.clone(),
+                font_size: 33.0,
+                ..default()
+            },
+            TextColor(TEXT_COLOR),
+        )],
     ));
 }
 

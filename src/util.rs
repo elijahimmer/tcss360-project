@@ -8,7 +8,7 @@ pub const SQRT_3_2: f32 = 0.866025403784438646763723170752936183_f32;
 pub const FLOOR_TILE_SIZE: IVec2 = IVec2 { x: 24, y: 26 };
 
 #[cfg(feature = "debug")]
-pub const OVERLAY_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
+pub const FPS_COUNTER_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 
 //#[derive(Resource)]
 //pub struct GlobalRandom(RandomSource);

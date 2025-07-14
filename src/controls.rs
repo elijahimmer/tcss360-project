@@ -18,7 +18,14 @@ fn setup_controls(mut commands: Commands, database: Res<Database>) {
 }
 
 const KEYBINDS_LEN: usize = 2;
-type Keybind = [Option<KeyCode>; KEYBINDS_LEN];
+pub type Keybind = [Option<KeyCode>; KEYBINDS_LEN];
+
+pub fn keybind_to_string(code: Option<KeyCode>) -> Box<str> {
+    match code {
+        Some(code) => ron::to_string(&code).unwrap().into(),
+        Option::None => "None".into(),
+    }
+}
 
 /// The list of controls for each input
 /// TODO: Implement controller inputs maybe

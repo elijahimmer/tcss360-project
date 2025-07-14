@@ -18,7 +18,7 @@ pub mod prelude {
     }
 
     pub use crate::camera::CameraPlugin;
-    pub use crate::controls::{Controls, ControlsPlugin};
+    pub use crate::controls::{Controls, ControlsPlugin, Keybind};
     pub use crate::menu::MenuPlugin;
     //pub use crate::save::{Save, SavePlugin};
     pub use crate::database::{Database, DatabasePlugin, FromDatabase, ToDatabase};
@@ -63,7 +63,7 @@ fn main() {
                 font_smoothing: FontSmoothing::default(),
                 ..default()
             },
-            text_color: OVERLAY_COLOR,
+            text_color: FPS_COUNTER_COLOR,
             refresh_interval: core::time::Duration::from_millis(100),
             enabled: true,
         },
