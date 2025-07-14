@@ -1,13 +1,19 @@
+use crate::controls::Control;
+use crate::embed_asset;
 use crate::prelude::*;
 //use bevy::audio::Volume;
 use bevy::ecs::spawn::SpawnIter;
 use bevy::prelude::*;
 
+const FONT_PATH: &str = "embedded://assets/fonts/Ithaca/Ithaca-LVB75.ttf";
+
 pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
+        embed_asset!(app, "assets/fonts/Ithaca/Ithaca-LVB75.ttf");
         app.init_state::<MenuState>()
+            .add_systems(Startup, load_font)
             .add_systems(OnEnter(GameState::Menu), menu_screen_enter)
             .add_systems(OnEnter(MenuState::Main), main_enter)
             .add_systems(OnExit(MenuState::Main), despawn_screen::<OnMenuScreen>)
@@ -37,6 +43,10 @@ impl Plugin for MenuPlugin {
             .add_systems(
                 Update,
                 (menu_action, button_system).run_if(in_state(GameState::Menu)),
+            )
+            .add_systems(
+                Update,
+                controls_menu_action.run_if(in_state(MenuState::SettingsControls)),
             );
     }
 }
@@ -77,6 +87,13 @@ enum MenuButtonAction {
     BackToSettings,
     BackToMenu,
     Quit,
+}
+
+#[derive(Resource)]
+struct Font(Handle<bevy::prelude::Font>);
+
+fn load_font(mut commands: Commands, assets: Res<AssetServer>) {
+    commands.insert_resource(Font(assets.load(FONT_PATH)));
 }
 
 fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
@@ -140,7 +157,7 @@ fn menu_action(
     }
 }
 
-fn main_enter(mut commands: Commands) {
+fn main_enter(mut commands: Commands, font: Res<Font>) {
     // Common style for all buttons on the screen
     let button_node = Node {
         width: Val::Px(300.0),
@@ -151,6 +168,7 @@ fn main_enter(mut commands: Commands) {
         ..default()
     };
     let button_text_font = TextFont {
+        font: font.0.clone(),
         font_size: 33.0,
         ..default()
     };
@@ -175,6 +193,7 @@ fn main_enter(mut commands: Commands) {
                 (
                     Text::new("TCSS360 Project"),
                     TextFont {
+                        font: font.0.clone(),
                         font_size: 67.0,
                         ..default()
                     },
@@ -231,7 +250,7 @@ fn main_enter(mut commands: Commands) {
     ));
 }
 
-fn settings_enter(mut commands: Commands) {
+fn settings_enter(mut commands: Commands, font: Res<Font>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -243,6 +262,7 @@ fn settings_enter(mut commands: Commands) {
 
     let button_text_style = (
         TextFont {
+            font: font.0.clone(),
             font_size: 33.0,
             ..default()
         },
@@ -286,7 +306,7 @@ fn settings_enter(mut commands: Commands) {
     ));
 }
 
-fn display_settings_enter(mut commands: Commands) {
+fn display_settings_enter(mut commands: Commands, font: Res<Font>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -298,6 +318,7 @@ fn display_settings_enter(mut commands: Commands) {
 
     let button_text_style = (
         TextFont {
+            font: font.0.clone(),
             font_size: 33.0,
             ..default()
         },
@@ -319,24 +340,18 @@ fn display_settings_enter(mut commands: Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             },
-            Children::spawn(SpawnIter(
-                [(MenuButtonAction::BackToSettings, "Back"),]
-                    .into_iter()
-                    .map(move |(action, text)| {
-                        (
-                            Button,
-                            button_node.clone(),
-                            BackgroundColor(NORMAL_BUTTON),
-                            action,
-                            children![(Text::new(text), button_text_style.clone())],
-                        )
-                    })
-            ))
+            children![(
+                Button,
+                button_node.clone(),
+                BackgroundColor(NORMAL_BUTTON),
+                MenuButtonAction::BackToSettings,
+                children![(Text::new("Back"), button_text_style.clone())],
+            )]
         )],
     ));
 }
 
-fn sound_settings_enter(mut commands: Commands /*volume: Res<Volume>*/) {
+fn sound_settings_enter(mut commands: Commands, font: Res<Font> /*volume: Res<Volume>*/) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -347,6 +362,7 @@ fn sound_settings_enter(mut commands: Commands /*volume: Res<Volume>*/) {
     };
     let button_text_style = (
         TextFont {
+            font: font.0.clone(),
             font_size: 33.0,
             ..default()
         },
@@ -406,7 +422,20 @@ fn sound_settings_enter(mut commands: Commands /*volume: Res<Volume>*/) {
     ));
 }
 
-fn controls_settings_enter(mut commands: Commands /*volume: Res<Volume>*/) {
+#[derive(Component)]
+enum ControlsButtonAction {
+    SetControl(Control, usize),
+    ClearControl(Control, usize),
+    ResetControl(Control),
+    ResetAll,
+}
+
+fn controls_settings_enter(
+    mut commands: Commands,
+    font: Res<Font>,
+    controls: Res<Controls>,
+    // volume: Res<Volume>,
+) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -417,6 +446,7 @@ fn controls_settings_enter(mut commands: Commands /*volume: Res<Volume>*/) {
     };
     let button_text_style = (
         TextFont {
+            font: font.0.clone(),
             font_size: 33.0,
             ..default()
         },
@@ -433,21 +463,109 @@ fn controls_settings_enter(mut commands: Commands /*volume: Res<Volume>*/) {
             ..default()
         },
         OnControlsSettingsMenuScreen,
-        children![(
-            Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            children![(
+        children![
+            (
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Children::spawn(SpawnIter(controls.clone().into_iter().map({
+                    let bn = button_node.clone();
+                    let bs = button_text_style.clone();
+                    move |(control_name, control_bind)| {
+                        (
+                            Node {
+                                width: Val::Percent(80.0),
+                                height: Val::Px(65.0),
+                                margin: UiRect::all(Val::Px(20.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                            Children::spawn(SpawnIter(
+                                [
+                                    (
+                                        ControlsButtonAction::SetControl(control_name, 0),
+                                        format!("{:?}", control_bind[0]),
+                                    ),
+                                    (
+                                        ControlsButtonAction::ClearControl(control_name, 0),
+                                        "Clear".to_string(),
+                                    ),
+                                    (
+                                        ControlsButtonAction::SetControl(control_name, 1),
+                                        format!("{:?}", control_bind[1]),
+                                    ),
+                                    (
+                                        ControlsButtonAction::ClearControl(control_name, 1),
+                                        "Clear".to_string(),
+                                    ),
+                                    (
+                                        ControlsButtonAction::ResetControl(control_name),
+                                        "Reset Both".to_string(),
+                                    ),
+                                ]
+                                .into_iter()
+                                .map({
+                                    let bn = bn.clone();
+                                    let bs = bs.clone();
+                                    move |(action, text)| {
+                                        (
+                                            Button,
+                                            bn.clone(),
+                                            BackgroundColor(NORMAL_BUTTON),
+                                            action,
+                                            children![(Text::new(text), bs.clone())],
+                                        )
+                                    }
+                                }),
+                            )),
+                        )
+                    }
+                })))
+            ),
+            (
                 Button,
-                button_node,
+                button_node.clone(),
+                BackgroundColor(NORMAL_BUTTON),
+                ControlsButtonAction::ResetAll,
+                children![(Text::new("ResetAll"), button_text_style.clone())],
+            ),
+            (
+                Button,
+                button_node.clone(),
                 BackgroundColor(NORMAL_BUTTON),
                 MenuButtonAction::BackToSettings,
-                children![(Text::new("Back"), button_text_style)]
-            )]
-        )],
+                children![(Text::new("Back"), button_text_style.clone())],
+            )
+        ],
     ));
+}
+
+fn controls_menu_action(
+    interaction_query: Query<
+        (&Interaction, &ControlsButtonAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut controls: ResMut<Controls>,
+) {
+    //pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<KeyCode>) {
+    for (interaction, contols_button_action) in &interaction_query {
+        if *interaction == Interaction::Pressed {
+            match contols_button_action {
+                ControlsButtonAction::SetControl(control, entry) => {
+                    controls.set_control(*control, *entry, None)
+                }
+                ControlsButtonAction::ClearControl(control, entry) => {
+                    controls.set_control(*control, *entry, None)
+                }
+                ControlsButtonAction::ResetControl(control) => controls.reset_control(*control),
+                ControlsButtonAction::ResetAll => controls.reset_controls(),
+            }
+        }
+    }
 }
 
 /// Helper method to despawn all of the entities with a given component.

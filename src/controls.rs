@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use bevy::prelude::*;
+use std::iter::IntoIterator;
 
 pub struct ControlsPlugin;
 
@@ -16,11 +17,12 @@ fn setup_controls(mut commands: Commands, database: Res<Database>) {
     commands.insert_resource(Controls::from_database(&database));
 }
 
-type Keybind = [Option<KeyCode>; 2];
+const KEYBINDS_LEN: usize = 2;
+type Keybind = [Option<KeyCode>; KEYBINDS_LEN];
 
 /// The list of controls for each input
 /// TODO: Implement controller inputs maybe
-#[derive(Resource, Reflect)]
+#[derive(Resource, Reflect, Clone)]
 #[reflect(Resource)]
 pub struct Controls {
     pub move_up: Keybind,
@@ -30,6 +32,52 @@ pub struct Controls {
     pub zoom_in: Keybind,
     pub zoom_out: Keybind,
     pub pause: Keybind,
+}
+
+impl Controls {
+    pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<KeyCode>) {
+        assert!(entry < KEYBINDS_LEN);
+
+        (match control {
+            Control::MoveUp => &mut self.move_up,
+            Control::MoveDown => &mut self.move_down,
+            Control::MoveLeft => &mut self.move_left,
+            Control::MoveRight => &mut self.move_right,
+            Control::ZoomIn => &mut self.zoom_in,
+            Control::ZoomOut => &mut self.zoom_out,
+            Control::Pause => &mut self.pause,
+        })[entry] = bind;
+    }
+
+    pub fn reset_control(&mut self, control: Control) {
+        match control {
+            Control::MoveUp => self.move_up = DEFAULT_UP_CONTROLS,
+            Control::MoveDown => self.move_down = DEFAULT_DOWN_CONTROLS,
+            Control::MoveLeft => self.move_left = DEFAULT_LEFT_CONTROLS,
+            Control::MoveRight => self.move_right = DEFAULT_RIGHT_CONTROLS,
+            Control::ZoomIn => self.zoom_in = DEFAULT_ZOOM_IN_CONTROLS,
+            Control::ZoomOut => self.zoom_out = DEFAULT_ZOOM_OUT_CONTROLS,
+            Control::Pause => self.pause = DEFAULT_PAUSE_CONTROLS,
+        }
+    }
+
+    pub fn reset_controls(&mut self) {
+        *self = default();
+    }
+}
+
+impl Default for Controls {
+    fn default() -> Self {
+        Self {
+            move_up: DEFAULT_UP_CONTROLS,
+            move_down: DEFAULT_DOWN_CONTROLS,
+            move_left: DEFAULT_LEFT_CONTROLS,
+            move_right: DEFAULT_RIGHT_CONTROLS,
+            zoom_in: DEFAULT_ZOOM_IN_CONTROLS,
+            zoom_out: DEFAULT_ZOOM_OUT_CONTROLS,
+            pause: DEFAULT_PAUSE_CONTROLS,
+        }
+    }
 }
 
 // TODO: Do this in a single transaction maybe? (don't know if it matters)
@@ -60,6 +108,84 @@ impl ToDatabase for Controls {
         set_keybind(database, "pause", self.pause)?;
 
         Ok(())
+    }
+}
+
+impl IntoIterator for Controls {
+    type Item = (Control, Keybind);
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> IntoIter {
+        IntoIter {
+            controls: self,
+            current: Some(default()),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct IntoIter {
+    controls: Controls,
+    current: Option<Control>,
+}
+
+impl Iterator for IntoIter {
+    type Item = (Control, Keybind);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current.and_then(|control| {
+            let res = match control {
+                Control::MoveUp => (Control::MoveUp, self.controls.move_up),
+                Control::MoveDown => (Control::MoveDown, self.controls.move_down),
+                Control::MoveLeft => (Control::MoveLeft, self.controls.move_left),
+                Control::MoveRight => (Control::MoveRight, self.controls.move_right),
+                Control::ZoomIn => (Control::ZoomIn, self.controls.zoom_in),
+                Control::ZoomOut => (Control::ZoomOut, self.controls.zoom_out),
+                Control::Pause => (Control::Pause, self.controls.pause),
+            };
+
+            self.current = control.next();
+
+            Some(res)
+        })
+    }
+}
+
+#[derive(Default, Eq, PartialEq, Ord, PartialOrd, Hash, Clone, Copy)]
+pub enum Control {
+    #[default]
+    MoveUp,
+    MoveDown,
+    MoveLeft,
+    MoveRight,
+    ZoomIn,
+    ZoomOut,
+    Pause,
+}
+
+impl Control {
+    pub fn next(self) -> Option<Self> {
+        match self {
+            Control::MoveUp => Some(Control::MoveDown),
+            Control::MoveDown => Some(Control::MoveLeft),
+            Control::MoveLeft => Some(Control::MoveRight),
+            Control::MoveRight => Some(Control::ZoomIn),
+            Control::ZoomIn => Some(Control::ZoomOut),
+            Control::ZoomOut => Some(Control::Pause),
+            Control::Pause => None,
+        }
+    }
+
+    pub fn to_string(self) -> &'static str {
+        match self {
+            Control::MoveUp => "Move Up",
+            Control::MoveDown => "Move Down",
+            Control::MoveLeft => "Move Left",
+            Control::MoveRight => "Move Right",
+            Control::ZoomIn => "Zoom In",
+            Control::ZoomOut => "Zoom Out",
+            Control::Pause => "Pause",
+        }
     }
 }
 
