@@ -425,6 +425,8 @@ enum ControlsButtonAction {
     ResetAll,
 }
 
+const CONTROLS_GRID_WIDTH: u16 = 8;
+
 fn controls_settings_enter(
     mut commands: Commands,
     font: Res<CurrentFont>,
@@ -466,14 +468,14 @@ fn controls_settings_enter(
             builder
                 .spawn(Node {
                     width: Val::Percent(100.0),
-                    height: Val::Percent(90.0),
+                    height: Val::Percent(85.0),
                     margin: UiRect::all(Val::Px(10.0)),
 
                     align_items: AlignItems::Center,
                     justify_items: JustifyItems::Center,
                     row_gap: Val::Px(10.0),
 
-                    grid_template_columns: RepeatedGridTrack::flex(6, 5.0),
+                    grid_template_columns: RepeatedGridTrack::flex(CONTROLS_GRID_WIDTH, 5.0),
                     display: Display::Grid,
 
                     overflow: Overflow::scroll_y(),
@@ -490,8 +492,10 @@ fn controls_settings_enter(
                 .spawn((
                     Node {
                         width: Val::Percent(100.0),
+                        height: Val::Px(80.0),
+                        padding: UiRect::all(Val::Px(5.0)),
                         position_type: PositionType::Absolute,
-                        align_items: AlignItems::Start,
+                        align_items: AlignItems::Center,
                         justify_items: JustifyItems::Center,
                         align_self: AlignSelf::End,
                         ..default()
@@ -526,14 +530,13 @@ fn controls_settings_row(
     builder
         .spawn((
             Node {
-                width: Val::Vw(100.0 / 6.0),
-                min_height: Val::Px(65.0),
+                width: Val::Vw(100.0 / CONTROLS_GRID_WIDTH as f32),
+                min_height: Val::Px(60.0),
                 align_items: AlignItems::Center,
                 ..default()
             },
             Label,
             AccessibilityNode(Accessible::new(Role::ListItem)),
-
         ))
         .insert(Pickable {
             should_block_lower: false,
@@ -555,23 +558,33 @@ fn controls_settings_row(
         (
             keybind_to_string(keys[0]),
             ControlsButtonAction::SetControl(control, 0),
+            GridPlacement::span(2),
         ),
         (
             "Clear".into(),
             ControlsButtonAction::ClearControl(control, 0),
+            GridPlacement::span(1),
         ),
         (
             keybind_to_string(keys[1]),
             ControlsButtonAction::SetControl(control, 1),
+            GridPlacement::span(2),
         ),
         (
             "Clear".into(),
             ControlsButtonAction::ClearControl(control, 1),
+            GridPlacement::span(1),
         ),
-        ("Reset".into(), ControlsButtonAction::ResetControl(control)),
+        (
+            "Reset".into(),
+            ControlsButtonAction::ResetControl(control),
+            GridPlacement::span(1),
+        ),
     ]
     .into_iter()
-    .for_each(|(name, action)| controls_settings_button(builder, font.clone(), name, action))
+    .for_each(|(name, action, grid)| {
+        controls_settings_button(builder, font.clone(), name, action, grid)
+    })
 }
 
 fn controls_settings_button(
@@ -579,14 +592,16 @@ fn controls_settings_button(
     font: Handle<Font>,
     name: Box<str>,
     action: ControlsButtonAction,
+    grid_column: GridPlacement,
 ) {
     let button_node = Node {
-        width: Val::Vw(100.0 / 6.0),
-        height: Val::Px(65.0),
+        width: Val::Vw(100.0 / CONTROLS_GRID_WIDTH as f32 * grid_column.get_span().unwrap() as f32),
+        height: Val::Px(CONTROLS_LINE_HEIGHT),
         margin: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(0.0), Val::Px(0.0)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
         overflow: Overflow::clip(),
+        grid_column,
         ..default()
     };
 
@@ -638,7 +653,7 @@ fn controls_menu_action(
     }
 }
 
-const LINE_HEIGHT: f32 = 21.;
+const CONTROLS_LINE_HEIGHT: f32 = 65.0;
 
 pub fn update_scroll_position(
     mut mouse_wheel_events: EventReader<MouseWheel>,
@@ -649,8 +664,8 @@ pub fn update_scroll_position(
     for mouse_wheel_event in mouse_wheel_events.read() {
         let (mut dx, mut dy) = match mouse_wheel_event.unit {
             MouseScrollUnit::Line => (
-                mouse_wheel_event.x * LINE_HEIGHT,
-                mouse_wheel_event.y * LINE_HEIGHT,
+                mouse_wheel_event.x * CONTROLS_LINE_HEIGHT,
+                mouse_wheel_event.y * CONTROLS_LINE_HEIGHT,
             ),
             MouseScrollUnit::Pixel => (mouse_wheel_event.x, mouse_wheel_event.y),
         };
