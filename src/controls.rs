@@ -20,7 +20,7 @@ fn setup_controls(mut commands: Commands, database: Res<Database>) {
 const KEYBINDS_LEN: usize = 2;
 pub type Keybind = [Option<KeyCode>; KEYBINDS_LEN];
 
-pub fn keybind_to_string(code: Option<KeyCode>) -> Box<str> {
+pub fn keybind_to_string(code: Option<KeyCode>) -> String {
     match code {
         Some(code) => ron::to_string(&code).unwrap().into(),
         Option::None => "None".into(),
@@ -43,6 +43,20 @@ pub struct Controls {
 }
 
 impl Controls {
+    pub fn get_control(&self, control: Control, entry: usize) -> Option<KeyCode> {
+        assert!(entry < KEYBINDS_LEN);
+
+        (match control {
+            Control::MoveUp => self.move_up,
+            Control::MoveDown => self.move_down,
+            Control::MoveLeft => self.move_left,
+            Control::MoveRight => self.move_right,
+            Control::ZoomIn => self.zoom_in,
+            Control::ZoomOut => self.zoom_out,
+            Control::Pause => self.pause,
+            Control::Select => self.select,
+        })[entry]
+    }
     pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<KeyCode>) {
         assert!(entry < KEYBINDS_LEN);
 
@@ -67,7 +81,7 @@ impl Controls {
             Control::ZoomIn => self.zoom_in = DEFAULT_ZOOM_IN_CONTROLS,
             Control::ZoomOut => self.zoom_out = DEFAULT_ZOOM_OUT_CONTROLS,
             Control::Pause => self.pause = DEFAULT_PAUSE_CONTROLS,
-            Control::Select => self.pause = DEFAULT_SELECT_CONTROLS,
+            Control::Select => self.select = DEFAULT_SELECT_CONTROLS,
         }
     }
 
@@ -192,7 +206,7 @@ impl Control {
         }
     }
 
-    pub fn to_string(self) -> &'static str {
+    pub fn as_string(self) -> &'static str {
         match self {
             Control::MoveUp => "Move Up",
             Control::MoveDown => "Move Down",
@@ -203,6 +217,13 @@ impl Control {
             Control::Pause => "Pause",
             Control::Select => "Select",
         }
+    }
+}
+
+use std::fmt::{Display, Formatter};
+impl Display for Control {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.as_string())
     }
 }
 
@@ -289,7 +310,7 @@ fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(),
     Ok(())
 }
 
-fn controls_sync(_commands: Commands, database: Res<Database>, controls: Res<Controls>) {
+fn controls_sync(database: Res<Database>, controls: Res<Controls>) {
     match controls.to_database(&database) {
         Ok(()) => {}
         Err(err) => {

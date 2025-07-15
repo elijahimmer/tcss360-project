@@ -8,6 +8,7 @@ use bevy::{
     input::mouse::{MouseScrollUnit, MouseWheel},
     picking::hover::HoverMap,
     prelude::*,
+    ui::FocusPolicy,
 };
 
 use accesskit::{Node as Accessible, Role};
@@ -26,11 +27,29 @@ impl Plugin for MenuPlugin {
             .add_systems(OnExit(MenuState::Main), despawn_screen::<OnMenuScreen>)
             .add_systems(OnEnter(MenuState::Settings), settings_enter)
             .add_systems(OnExit(MenuState::Settings), despawn_screen::<OnSettings>)
-            .add_systems(OnEnter(MenuState::Display), display_settings_enter)
+            .add_systems(OnEnter(MenuState::Display), display_enter)
             .add_systems(OnExit(MenuState::Display), despawn_screen::<OnDisplay>)
-            .add_systems(OnEnter(MenuState::Sound), sound_settings_enter)
+            .add_systems(OnEnter(MenuState::Sound), sound_enter)
             .add_systems(OnExit(MenuState::Sound), despawn_screen::<OnSoundScreen>)
-            .add_systems(OnEnter(MenuState::Controls), controls_settings_enter)
+            .add_systems(OnEnter(MenuState::Controls), controls_enter)
+            .add_systems(
+                Update,
+                controls_changed.run_if(
+                    in_state(MenuState::Controls)
+                        .and(resource_changed::<Controls>.and(not(resource_added::<Controls>))),
+                ),
+            )
+            .add_systems(
+                Update,
+                control_set_added
+                    .run_if(in_state(MenuState::Controls).and(resource_added::<SetControlTarget>)),
+            )
+            .add_systems(
+                Update,
+                despawn_screen::<OnSetControl>.run_if(
+                    in_state(MenuState::Controls).and(resource_removed::<SetControlTarget>),
+                ),
+            )
             .add_systems(OnExit(MenuState::Controls), despawn_screen::<OnControls>)
             .add_systems(
                 Update,
@@ -71,6 +90,9 @@ struct OnSoundScreen;
 struct OnControls;
 
 #[derive(Component)]
+struct OnSetControl;
+
+#[derive(Component)]
 enum MenuButtonAction {
     Play,
     MainMenu,
@@ -93,6 +115,7 @@ fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
 }
 
 const BACKGROUND_COLOR: Color = Color::srgba_u8(0x26, 0x23, 0x3a, 0xaa);
+const OVERLAY_COLOR: Color = Color::srgba_u8(0x26, 0x23, 0x3a, 0xdd);
 const TITLE_COLOR: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
 const TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
 const NORMAL_BUTTON: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
@@ -298,7 +321,7 @@ fn settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
     ));
 }
 
-fn display_settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
+fn display_enter(mut commands: Commands, font: Res<CurrentFont>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -343,10 +366,7 @@ fn display_settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
     ));
 }
 
-fn sound_settings_enter(
-    mut commands: Commands,
-    font: Res<CurrentFont>, /*volume: Res<Volume>*/
-) {
+fn sound_enter(mut commands: Commands, font: Res<CurrentFont> /*volume: Res<Volume>*/) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -361,6 +381,7 @@ fn sound_settings_enter(
             font_size: 33.0,
             ..default()
         },
+        TextLayout::new_with_justify(JustifyText::Center),
         TextColor(TEXT_COLOR),
     );
 
@@ -419,18 +440,18 @@ fn sound_settings_enter(
 
 #[derive(Component)]
 enum ControlsButtonAction {
-    SetControl(Control, usize),
-    ClearControl(Control, usize),
+    PromptSetControl(Control, usize),
+    CancelSet,
     ResetControl(Control),
     ResetAll,
 }
 
-fn controls_settings_enter(
-    mut commands: Commands,
-    font: Res<CurrentFont>,
-    controls: Res<Controls>,
-    // volume: Res<Volume>,
-) {
+const NO_BLOCK_SCROLL: Pickable = Pickable {
+    should_block_lower: false,
+    is_hoverable: false,
+};
+
+fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<Controls>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -447,6 +468,7 @@ fn controls_settings_enter(
             ..default()
         },
         TextColor(TEXT_COLOR),
+        TextLayout::new_with_justify(JustifyText::Center),
     );
 
     //let button_node_clone = button_node.clone();
@@ -480,55 +502,51 @@ fn controls_settings_enter(
                 })
                 .with_children(|builder| {
                     controls.clone().into_iter().for_each(|(control, keys)| {
-                        controls_settings_row(builder, font.0.clone(), control, keys)
+                        controls_row(builder, font.0.clone(), control, keys)
                     })
                 });
 
-            builder
-                .spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        height: Val::Px(80.0),
-                        padding: UiRect::all(Val::Px(5.0)),
-                        position_type: PositionType::Absolute,
-                        align_items: AlignItems::Center,
-                        justify_items: JustifyItems::Center,
-                        align_self: AlignSelf::End,
-                        ..default()
-                    },
-                    BackgroundColor(BACKGROUND_COLOR),
-                ))
-                .with_children(|builder| {
-                    builder.spawn((
-                        Button,
-                        button_node.clone(),
-                        BackgroundColor(NORMAL_BUTTON),
-                        ControlsButtonAction::ResetAll,
-                        children![(Text::new("ResetAll"), button_text_style.clone())],
-                    ));
-                    builder.spawn((
+            builder.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(80.0),
+                    padding: UiRect::all(Val::Px(5.0)),
+                    position_type: PositionType::Absolute,
+                    align_items: AlignItems::Center,
+                    justify_items: JustifyItems::Center,
+                    align_self: AlignSelf::End,
+                    ..default()
+                },
+                FocusPolicy::Block,
+                BackgroundColor(BACKGROUND_COLOR),
+                children![
+                    (
                         Button,
                         button_node.clone(),
                         BackgroundColor(NORMAL_BUTTON),
                         MenuButtonAction::Settings,
                         children![(Text::new("Back"), button_text_style.clone())],
-                    ));
-                });
+                    ),
+                    (
+                        Button,
+                        button_node.clone(),
+                        BackgroundColor(NORMAL_BUTTON),
+                        ControlsButtonAction::ResetAll,
+                        children![(Text::new("ResetAll"), button_text_style.clone())],
+                    ),
+                ],
+            ));
         });
 }
 
-fn controls_settings_row(
+fn controls_row(
     builder: &mut RelatedSpawnerCommands<'_, ChildOf>,
     font: Handle<Font>,
     control: Control,
     keys: Keybind,
 ) {
     builder
-        .spawn(Node::default())
-        .insert(Pickable {
-            should_block_lower: false,
-            ..default()
-        })
+        .spawn((Node::default(), NO_BLOCK_SCROLL))
         .with_children(|builder| {
             builder
                 .spawn((
@@ -540,66 +558,49 @@ fn controls_settings_row(
                     },
                     Label,
                     AccessibilityNode(Accessible::new(Role::ListItem)),
+                    NO_BLOCK_SCROLL,
                 ))
-                .insert(Pickable {
-                    should_block_lower: false,
-                    ..default()
-                })
                 .with_children(|builder| {
-                    builder
-                        .spawn((
-                            Text::new(control.to_string()),
-                            TextColor(TITLE_COLOR),
-                            TextFont {
-                                font: font.clone(),
-                                font_size: 33.0,
-                                ..default()
-                            },
-                        ))
-                        .insert(Pickable {
-                            should_block_lower: false,
+                    builder.spawn((
+                        Text::new(control.to_string()),
+                        TextColor(TITLE_COLOR),
+                        TextFont {
+                            font: font.clone(),
+                            font_size: 33.0,
                             ..default()
-                        });
+                        },
+                        NO_BLOCK_SCROLL,
+                    ));
                 });
 
             [
                 (
                     keybind_to_string(keys[0]),
-                    ControlsButtonAction::SetControl(control, 0),
+                    ControlsButtonAction::PromptSetControl(control, 0),
                     Val::Px(150.0),
-                ),
-                (
-                    "Clear".into(),
-                    ControlsButtonAction::ClearControl(control, 0),
-                    Val::Px(75.0),
                 ),
                 (
                     keybind_to_string(keys[1]),
-                    ControlsButtonAction::SetControl(control, 1),
+                    ControlsButtonAction::PromptSetControl(control, 1),
                     Val::Px(150.0),
                 ),
                 (
-                    "Clear".into(),
-                    ControlsButtonAction::ClearControl(control, 1),
-                    Val::Px(75.0),
-                ),
-                (
-                    "Reset".into(),
+                    "Reset Both".into(),
                     ControlsButtonAction::ResetControl(control),
-                    Val::Px(75.0),
+                    Val::Px(125.0),
                 ),
             ]
             .into_iter()
             .for_each(|(name, action, width)| {
-                controls_settings_button(builder, font.clone(), name, action, width)
+                controls_button(builder, font.clone(), name, action, width)
             })
         });
 }
 
-fn controls_settings_button(
+fn controls_button(
     builder: &mut RelatedSpawnerCommands<'_, ChildOf>,
     font: Handle<Font>,
-    name: Box<str>,
+    name: String,
     action: ControlsButtonAction,
     width: Val,
 ) {
@@ -618,46 +619,39 @@ fn controls_settings_button(
             button_node.clone(),
             action,
             AccessibilityNode(Accessible::new(Role::ListItem)),
+            NO_BLOCK_SCROLL,
         ))
-        .insert(Pickable {
-            should_block_lower: false,
-            ..default()
-        })
         .with_children(|builder| {
-            builder
-                .spawn((
-                    Text::new(name),
-                    TextFont {
-                        font: font.clone(),
-                        font_size: 33.0,
-                        ..default()
-                    },
-                    TextColor(TEXT_COLOR),
-                    Label,
-                ))
-                .insert(Pickable {
-                    should_block_lower: false,
+            builder.spawn((
+                Text::new(name),
+                TextFont {
+                    font: font.clone(),
+                    font_size: 33.0,
                     ..default()
-                });
+                },
+                TextColor(TEXT_COLOR),
+                Label,
+                NO_BLOCK_SCROLL,
+            ));
         });
 }
 
 fn controls_menu_action(
+    mut commands: Commands,
     interaction_query: Query<
         (&Interaction, &ControlsButtonAction),
         (Changed<Interaction>, With<Button>),
     >,
     mut controls: ResMut<Controls>,
 ) {
-    //pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<KeyCode>) {
     for (interaction, contols_button_action) in &interaction_query {
         if *interaction == Interaction::Pressed {
             match contols_button_action {
-                ControlsButtonAction::SetControl(control, entry) => {
-                    controls.set_control(*control, *entry, None)
+                ControlsButtonAction::PromptSetControl(control, entry) => {
+                    commands.insert_resource(SetControlTarget(*control, *entry));
                 }
-                ControlsButtonAction::ClearControl(control, entry) => {
-                    controls.set_control(*control, *entry, None)
+                ControlsButtonAction::CancelSet => {
+                    commands.remove_resource::<SetControlTarget>();
                 }
                 ControlsButtonAction::ResetControl(control) => controls.reset_control(*control),
                 ControlsButtonAction::ResetAll => controls.reset_controls(),
@@ -666,9 +660,28 @@ fn controls_menu_action(
     }
 }
 
+fn controls_changed(
+    controls: Res<Controls>,
+    button: Query<(&ControlsButtonAction, &Children)>,
+    mut text_query: Query<&mut Text>,
+) {
+    for (action, children) in button.iter() {
+        match action {
+            ControlsButtonAction::PromptSetControl(control, idx) => {
+                let mut text = text_query.get_mut(children[0]).unwrap();
+
+                **text = keybind_to_string(controls.get_control(*control, *idx));
+            }
+            ControlsButtonAction::CancelSet
+            | ControlsButtonAction::ResetControl(..)
+            | ControlsButtonAction::ResetAll => {}
+        }
+    }
+}
+
 const CONTROLS_LINE_HEIGHT: f32 = 65.0;
 
-pub fn update_scroll_position(
+fn update_scroll_position(
     mut mouse_wheel_events: EventReader<MouseWheel>,
     hover_map: Res<HoverMap>,
     mut scrolled_node_query: Query<&mut ScrollPosition>,
@@ -687,6 +700,112 @@ pub fn update_scroll_position(
             }
         }
     }
+}
+
+#[derive(Resource)]
+struct SetControlTarget(Control, usize);
+
+fn control_set_added(
+    mut commands: Commands,
+    font: Res<CurrentFont>,
+    controls: Res<Controls>,
+    target: Res<SetControlTarget>,
+) {
+    let SetControlTarget(target_control, target_idx) = *target;
+    let button_node = Node {
+        width: Val::Px(200.0),
+        height: Val::Px(65.0),
+        margin: UiRect::all(Val::Px(5.0)),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    };
+
+    let button_text_style = (
+        TextFont {
+            font: font.0.clone(),
+            font_size: 33.0,
+            ..default()
+        },
+        TextColor(TEXT_COLOR),
+        TextLayout::new_with_justify(JustifyText::Center),
+    );
+
+    //let button_node_clone = button_node.clone();
+    commands
+        .spawn((
+            Node {
+                display: Display::Flex,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Start,
+                justify_content: JustifyContent::Center,
+                align_self: AlignSelf::Center,
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            FocusPolicy::Block,
+            OnSetControl,
+            BackgroundColor(OVERLAY_COLOR),
+            ZIndex(1),
+        ))
+        .with_children(|builder| {
+            builder
+                .spawn((
+                    Node {
+                        width: Val::Percent(95.0),
+                        height: Val::Percent(85.0),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    children![(
+                        Text::new(format!(
+                            "Rebind '{target_control}' {}",
+                            (target_idx as u8 + b'A') as char
+                        )),
+                        TextFont {
+                            font: font.0.clone(),
+                            font_size: 67.0,
+                            ..default()
+                        },
+                        TextColor(TEXT_COLOR),
+                        Node {
+                            margin: UiRect::all(Val::Px(50.0)),
+                            ..default()
+                        },
+                    ),],
+                ))
+                .with_children(|builder| {
+                    builder.spawn((
+                        Button,
+                        button_node.clone(),
+                        BackgroundColor(NORMAL_BUTTON),
+                        children![(Text::new("Reset"), button_text_style.clone(),),],
+                    ));
+                });
+
+            builder.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(80.0),
+                    padding: UiRect::all(Val::Px(5.0)),
+                    position_type: PositionType::Absolute,
+                    align_items: AlignItems::Center,
+                    justify_items: JustifyItems::Center,
+                    align_self: AlignSelf::End,
+                    ..default()
+                },
+                BackgroundColor(BACKGROUND_COLOR),
+                children![(
+                    Button,
+                    button_node.clone(),
+                    BackgroundColor(NORMAL_BUTTON),
+                    ControlsButtonAction::CancelSet,
+                    children![(Text::new("Cancel"), button_text_style.clone())],
+                )],
+            ));
+        });
 }
 
 /// Helper method to despawn all of the entities with a given component.
