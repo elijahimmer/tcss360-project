@@ -468,9 +468,8 @@ fn sound_enter(mut commands: Commands, font: Res<CurrentFont> /*volume: Res<Volu
 enum ControlsButtonAction {
     Select(Control, usize),
     Reset(Control, usize),
-    Set(Control, usize, KeyCode),
     Clear(Control, usize),
-    Prompt(Control, usize),
+    Prompt,
     CancelPrompt,
     CancelSelect,
     ResetBoth(Control),
@@ -691,14 +690,11 @@ fn controls_menu_action(
                 ControlsButtonAction::Reset(control, idx) => {
                     controls.reset_control_part(*control, *idx);
                 }
-                ControlsButtonAction::Prompt(control, idx) => {
+                ControlsButtonAction::Prompt => {
                     commands.set_state(PromptControlState::Single);
                 }
                 ControlsButtonAction::CancelPrompt => {
                     commands.run_system_cached(despawn_screen::<OnPromptControl>);
-                }
-                ControlsButtonAction::Set(control, idx, code) => {
-                    controls.set_control(*control, *idx, Some(*code));
                 }
                 ControlsButtonAction::ResetBoth(control) => controls.reset_control(*control),
                 ControlsButtonAction::ResetAll => controls.reset_controls(),
@@ -709,29 +705,30 @@ fn controls_menu_action(
 
 fn controls_changed(
     controls: Res<Controls>,
-    current_control: Res<SetControlTarget>,
+    current_control: Option<Res<SetControlTarget>>,
     button: Query<(&ControlsButtonAction, &Children)>,
     mut current: Query<&mut Text, With<CurrentControl>>,
     mut text_query: Query<&mut Text, Without<CurrentControl>>,
 ) {
-    if let Ok(mut current) = current.single_mut() {
-        *current = Text::new(format!(
-            "Current: '{}'",
-            keybind_to_string(controls.get_control(current_control.0, current_control.1))
-        ));
+    if let Some(current_control) = current_control {
+        if let Ok(mut current) = current.single_mut() {
+            *current = Text::new(format!(
+                "Current: '{}'",
+                keybind_to_string(controls.get_control(current_control.0, current_control.1))
+            ));
+        };
     };
 
     for (action, children) in button.iter() {
         match action {
-            ControlsButtonAction::Select(control, idx)
-            | ControlsButtonAction::Set(control, idx, ..) => {
+            ControlsButtonAction::Select(control, idx) => {
                 let mut text = text_query.get_mut(children[0]).unwrap();
 
                 **text = keybind_to_string(controls.get_control(*control, *idx));
             }
             ControlsButtonAction::CancelSelect
             | ControlsButtonAction::CancelPrompt
-            | ControlsButtonAction::Prompt(..)
+            | ControlsButtonAction::Prompt
             | ControlsButtonAction::Reset(..)
             | ControlsButtonAction::ResetBoth(..)
             | ControlsButtonAction::Clear(..)
@@ -763,8 +760,7 @@ fn update_scroll_position(
     }
 }
 
-fn control_prompt(mut commands: Commands, font: Res<CurrentFont>, target: Res<SetControlTarget>) {
-    let SetControlTarget(target_control, target_idx) = *target;
+fn control_prompt(mut commands: Commands, font: Res<CurrentFont>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -943,8 +939,8 @@ fn control_set_added(
                         Button,
                         button_node.clone(),
                         BackgroundColor(NORMAL_BUTTON),
-                        ControlsButtonAction::Prompt(target_control, target_idx),
-                        children![(Text::new("Enter"), button_text_style.clone(),),],
+                        ControlsButtonAction::Prompt,
+                        children![(Text::new("Bind Key"), button_text_style.clone(),),],
                     ),
                     (
                         Button,
