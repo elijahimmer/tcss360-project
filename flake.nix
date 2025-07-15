@@ -47,6 +47,7 @@
           lld
           rustc
           cargo
+          just
         ];
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
       };
