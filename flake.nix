@@ -35,19 +35,22 @@
             xorg.libXcursor
             xorg.libXi
             xorg.libXrandr
+            wayland
           ];
         nativeBuildInputs = with pkgs; [
           pkg-config
           # For debugging around vulkan
           vulkan-tools
           sqlite
-          wasm-bindgen-cli_0_2_100
-          trunk
-          binaryen
           lld
           rustc
           cargo
           just
+
+          # Wasm
+          wasm-bindgen-cli_0_2_100
+          trunk
+          binaryen
         ];
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
       };

@@ -16,6 +16,7 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 sqlite = { version = "0.37", optional = true }
 thiserror = "2"
 wyrand = { version = "0.3", features = ["serde1"] }
+blake3 = { version = "1.8", features = [ "pure" ] }
 
 [dependencies.bevy]
 version = "0.16"
@@ -72,12 +73,17 @@ inherits = "release"
 opt-level = "s"
 strip = "debuginfo"
 
+[profile.wayland]
+inherits = "dev"
+
 [features]
-default = ["debug", "sqlite"]
+default = ["sqlite"]
 sqlite = ["dep:sqlite"]
 debug = [
   "bevy/bevy_dev_tools",
   "bevy/debug_glam_assert",
+]
+dev = [
   "bevy/dynamic_linking",
   "bevy/file_watcher",
 ]
