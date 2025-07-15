@@ -1,10 +1,12 @@
 mod camera;
 mod controls;
+#[cfg(feature = "sqlite")]
 mod database;
 mod menu;
 //mod save;
 mod sky;
 mod util;
+
 
 pub mod prelude {
     use bevy::prelude::States;
@@ -21,6 +23,7 @@ pub mod prelude {
     pub use crate::controls::{Controls, ControlsPlugin, Keybind};
     pub use crate::menu::MenuPlugin;
     //pub use crate::save::{Save, SavePlugin};
+    #[cfg(feature = "sqlite")]
     pub use crate::database::{Database, DatabasePlugin, FromDatabase, ToDatabase};
     pub use crate::sky::SkyPlugin;
     pub use crate::util::*;
@@ -49,7 +52,7 @@ fn main() {
                     ..default()
                 }),
                 ..default()
-            }),
+            })
     ); // fallback to nearest sampling
 
     embed_asset!(app, "assets/sprites/basic_sheet.png");
@@ -72,10 +75,12 @@ fn main() {
     // foreign plugins
     app.add_plugins(TilemapPlugin)
         // State
-        .init_state::<GameState>()
-        // Local Plugins
-        .add_plugins(DatabasePlugin)
-        .add_plugins(ControlsPlugin)
+        .init_state::<GameState>();
+    // Local Plugins
+    #[cfg(feature = "sqlite")]
+    app.add_plugins(DatabasePlugin);
+
+    app.add_plugins(ControlsPlugin)
         .add_plugins(MenuPlugin)
         .add_plugins(SkyPlugin)
         //.add_plugins(SavePlugin)

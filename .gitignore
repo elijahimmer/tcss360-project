@@ -27,3 +27,7 @@ target/
 
 # Nix build result
 /result
+
+# Wasm build
+/dist
+game.zip

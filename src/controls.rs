@@ -1,3 +1,4 @@
+#[cfg(feature = "sqlite")]
 use crate::prelude::*;
 use bevy::prelude::*;
 use std::iter::IntoIterator;
@@ -6,15 +7,21 @@ pub struct ControlsPlugin;
 
 impl Plugin for ControlsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_controls).add_systems(
+        app.add_systems(Startup, setup_controls);
+
+        #[cfg(feature = "sqlite")]
+        app.add_systems(
             Update,
             controls_sync.run_if(resource_changed::<Controls>.and(not(resource_added::<Controls>))),
         );
     }
 }
 
-fn setup_controls(mut commands: Commands, database: Res<Database>) {
+fn setup_controls(mut commands: Commands, #[cfg(feature = "sqlite")] database: Res<Database>) {
+    #[cfg(feature = "sqlite")]
     commands.insert_resource(Controls::from_database(&database));
+    #[cfg(not(feature = "sqlite"))]
+    commands.insert_resource(Controls::default());
 }
 
 const KEYBINDS_LEN: usize = 2;
@@ -120,6 +127,7 @@ impl Default for Controls {
     }
 }
 
+#[cfg(feature = "sqlite")]
 // TODO: Do this in a single transaction maybe? (don't know if it matters)
 impl FromDatabase for Controls {
     fn from_database(database: &Database) -> Self {
@@ -136,6 +144,7 @@ impl FromDatabase for Controls {
     }
 }
 
+#[cfg(feature = "sqlite")]
 // TODO: Do this in a single transaction maybe? (don't know if it matters)
 impl ToDatabase for Controls {
     type Error = sqlite::Error;
@@ -252,6 +261,7 @@ const DEFAULT_PAUSE_CONTROLS: Keybind = [Some(KeyCode::Escape), Some(KeyCode::Pa
 // TODO: Change this to mouse button left.
 const DEFAULT_SELECT_CONTROLS: Keybind = [Some(KeyCode::KeyA), None];
 
+#[cfg(feature = "sqlite")]
 fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) -> Keybind {
     query_keybind_or_set_fallible(database, keybind, default)
         .inspect_err(|err| {
@@ -260,6 +270,7 @@ fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) ->
         .unwrap_or(default)
 }
 
+#[cfg(feature = "sqlite")]
 fn query_keybind_or_set_fallible(
     database: &Database,
     keybind: &str,
@@ -278,6 +289,7 @@ fn query_keybind_or_set_fallible(
     })
 }
 
+#[cfg(feature = "sqlite")]
 fn query_keybind(database: &Database, keybind: &str) -> Result<Option<Keybind>, sqlite::Error> {
     let query = "SELECT key1,key2 FROM Keybinds WHERE keybind = :keybind";
 
@@ -305,6 +317,7 @@ fn query_keybind(database: &Database, keybind: &str) -> Result<Option<Keybind>, 
     ]))
 }
 
+#[cfg(feature = "sqlite")]
 fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(), sqlite::Error> {
     let query = "INSERT OR REPLACE INTO Keybinds VALUES (:keybind, :key1, :key2)";
 
@@ -325,6 +338,7 @@ fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(),
     Ok(())
 }
 
+#[cfg(feature = "sqlite")]
 fn controls_sync(database: Res<Database>, controls: Res<Controls>) {
     match controls.to_database(&database) {
         Ok(()) => {}

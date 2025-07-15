@@ -12,7 +12,8 @@ directories = "6"
 rand = { version = "0.9", features = ["log"] }
 ron = "0.10"
 serde = { version = "1", features = ["serde_derive", "alloc"] }
-sqlite = "0.37"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+sqlite = { version = "0.37", optional = true }
 thiserror = "2"
 wyrand = { version = "0.3", features = ["serde1"] }
 
@@ -56,7 +57,7 @@ features = [
   "sysinfo_plugin",
   #"tonemapping_luts",
   #"vorbis",
-  #"webgl2",
+  "webgl2",
   "x11",
 ]
 
@@ -66,8 +67,14 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+strip = "debuginfo"
+
 [features]
-default = ["debug"]
+default = ["debug", "sqlite"]
+sqlite = ["dep:sqlite"]
 debug = [
   "bevy/bevy_dev_tools",
   "bevy/debug_glam_assert",
