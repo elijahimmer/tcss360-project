@@ -85,6 +85,21 @@ impl Controls {
         }
     }
 
+    pub fn reset_control_part(&mut self, control: Control, i: usize) {
+        assert!(i < KEYBINDS_LEN);
+
+        match control {
+            Control::MoveUp => self.move_up[i] = DEFAULT_UP_CONTROLS[i],
+            Control::MoveDown => self.move_down[i] = DEFAULT_DOWN_CONTROLS[i],
+            Control::MoveLeft => self.move_left[i] = DEFAULT_LEFT_CONTROLS[i],
+            Control::MoveRight => self.move_right[i] = DEFAULT_RIGHT_CONTROLS[i],
+            Control::ZoomIn => self.zoom_in[i] = DEFAULT_ZOOM_IN_CONTROLS[i],
+            Control::ZoomOut => self.zoom_out[i] = DEFAULT_ZOOM_OUT_CONTROLS[i],
+            Control::Pause => self.pause[i] = DEFAULT_PAUSE_CONTROLS[i],
+            Control::Select => self.select[i] = DEFAULT_SELECT_CONTROLS[i],
+        }
+    }
+
     pub fn reset_controls(&mut self) {
         *self = default();
     }

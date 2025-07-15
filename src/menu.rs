@@ -4,8 +4,9 @@ use crate::prelude::*;
 //use bevy::audio::Volume;
 use bevy::{
     a11y::AccessibilityNode,
-    ecs::{relationship::RelatedSpawnerCommands, spawn::SpawnIter},
+    ecs::{hierarchy::ChildSpawnerCommands, spawn::SpawnIter},
     input::mouse::{MouseScrollUnit, MouseWheel},
+    input::{ButtonState, keyboard::KeyboardInput},
     picking::hover::HoverMap,
     prelude::*,
     ui::FocusPolicy,
@@ -20,7 +21,9 @@ pub struct MenuPlugin;
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         embed_asset!(app, "assets/fonts/Ithaca/Ithaca-LVB75.ttf");
+        app.register_system(control_prompt);
         app.init_state::<MenuState>()
+            .init_state::<PromptControlState>()
             .add_systems(Startup, load_font)
             .add_systems(OnEnter(GameState::Menu), menu_screen_enter)
             .add_systems(OnEnter(MenuState::Main), main_enter)
@@ -59,6 +62,15 @@ impl Plugin for MenuPlugin {
                 Update,
                 (update_scroll_position, menu_action, button_system)
                     .run_if(in_state(GameState::Menu)),
+            )
+            .add_systems(OnEnter(PromptControlState::Single), control_prompt)
+            .add_systems(
+                OnExit(PromptControlState::Single),
+                despawn_screen::<OnPromptControl>,
+            )
+            .add_systems(
+                Update,
+                assign_key_input.run_if(in_state(PromptControlState::Single)),
             );
     }
 }
@@ -72,6 +84,13 @@ enum MenuState {
     Display,
     Sound,
     Controls,
+}
+
+#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
+enum PromptControlState {
+    #[default]
+    Disabled,
+    Single,
 }
 
 #[derive(Component)]
@@ -91,6 +110,12 @@ struct OnControls;
 
 #[derive(Component)]
 struct OnSetControl;
+
+#[derive(Component)]
+struct OnPromptControl;
+
+#[derive(Component)]
+struct CurrentControl;
 
 #[derive(Component)]
 enum MenuButtonAction {
@@ -115,6 +140,7 @@ fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
 }
 
 const BACKGROUND_COLOR: Color = Color::srgba_u8(0x26, 0x23, 0x3a, 0xaa);
+const BACKGROUND_COLOR_SOLID: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
 const OVERLAY_COLOR: Color = Color::srgba_u8(0x26, 0x23, 0x3a, 0xdd);
 const TITLE_COLOR: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
 const TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
@@ -440,9 +466,14 @@ fn sound_enter(mut commands: Commands, font: Res<CurrentFont> /*volume: Res<Volu
 
 #[derive(Component)]
 enum ControlsButtonAction {
-    PromptSetControl(Control, usize),
-    CancelSet,
-    ResetControl(Control),
+    Select(Control, usize),
+    Reset(Control, usize),
+    Set(Control, usize, KeyCode),
+    Clear(Control, usize),
+    Prompt(Control, usize),
+    CancelPrompt,
+    CancelSelect,
+    ResetBoth(Control),
     ResetAll,
 }
 
@@ -540,7 +571,7 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
 }
 
 fn controls_row(
-    builder: &mut RelatedSpawnerCommands<'_, ChildOf>,
+    builder: &mut ChildSpawnerCommands<'_>,
     font: Handle<Font>,
     control: Control,
     keys: Keybind,
@@ -576,17 +607,17 @@ fn controls_row(
             [
                 (
                     keybind_to_string(keys[0]),
-                    ControlsButtonAction::PromptSetControl(control, 0),
+                    ControlsButtonAction::Select(control, 0),
                     Val::Px(150.0),
                 ),
                 (
                     keybind_to_string(keys[1]),
-                    ControlsButtonAction::PromptSetControl(control, 1),
+                    ControlsButtonAction::Select(control, 1),
                     Val::Px(150.0),
                 ),
                 (
                     "Reset Both".into(),
-                    ControlsButtonAction::ResetControl(control),
+                    ControlsButtonAction::ResetBoth(control),
                     Val::Px(125.0),
                 ),
             ]
@@ -598,7 +629,7 @@ fn controls_row(
 }
 
 fn controls_button(
-    builder: &mut RelatedSpawnerCommands<'_, ChildOf>,
+    builder: &mut ChildSpawnerCommands<'_>,
     font: Handle<Font>,
     name: String,
     action: ControlsButtonAction,
@@ -647,13 +678,29 @@ fn controls_menu_action(
     for (interaction, contols_button_action) in &interaction_query {
         if *interaction == Interaction::Pressed {
             match contols_button_action {
-                ControlsButtonAction::PromptSetControl(control, entry) => {
+                ControlsButtonAction::Select(control, entry) => {
+                    commands.set_state(PromptControlState::Disabled);
                     commands.insert_resource(SetControlTarget(*control, *entry));
                 }
-                ControlsButtonAction::CancelSet => {
+                ControlsButtonAction::CancelSelect => {
                     commands.remove_resource::<SetControlTarget>();
                 }
-                ControlsButtonAction::ResetControl(control) => controls.reset_control(*control),
+                ControlsButtonAction::Clear(control, idx) => {
+                    controls.set_control(*control, *idx, None);
+                }
+                ControlsButtonAction::Reset(control, idx) => {
+                    controls.reset_control_part(*control, *idx);
+                }
+                ControlsButtonAction::Prompt(control, idx) => {
+                    commands.set_state(PromptControlState::Single);
+                }
+                ControlsButtonAction::CancelPrompt => {
+                    commands.run_system_cached(despawn_screen::<OnPromptControl>);
+                }
+                ControlsButtonAction::Set(control, idx, code) => {
+                    controls.set_control(*control, *idx, Some(*code));
+                }
+                ControlsButtonAction::ResetBoth(control) => controls.reset_control(*control),
                 ControlsButtonAction::ResetAll => controls.reset_controls(),
             }
         }
@@ -662,18 +709,32 @@ fn controls_menu_action(
 
 fn controls_changed(
     controls: Res<Controls>,
+    current_control: Res<SetControlTarget>,
     button: Query<(&ControlsButtonAction, &Children)>,
-    mut text_query: Query<&mut Text>,
+    mut current: Query<&mut Text, With<CurrentControl>>,
+    mut text_query: Query<&mut Text, Without<CurrentControl>>,
 ) {
+    if let Ok(mut current) = current.single_mut() {
+        *current = Text::new(format!(
+            "Current: '{}'",
+            keybind_to_string(controls.get_control(current_control.0, current_control.1))
+        ));
+    };
+
     for (action, children) in button.iter() {
         match action {
-            ControlsButtonAction::PromptSetControl(control, idx) => {
+            ControlsButtonAction::Select(control, idx)
+            | ControlsButtonAction::Set(control, idx, ..) => {
                 let mut text = text_query.get_mut(children[0]).unwrap();
 
                 **text = keybind_to_string(controls.get_control(*control, *idx));
             }
-            ControlsButtonAction::CancelSet
-            | ControlsButtonAction::ResetControl(..)
+            ControlsButtonAction::CancelSelect
+            | ControlsButtonAction::CancelPrompt
+            | ControlsButtonAction::Prompt(..)
+            | ControlsButtonAction::Reset(..)
+            | ControlsButtonAction::ResetBoth(..)
+            | ControlsButtonAction::Clear(..)
             | ControlsButtonAction::ResetAll => {}
         }
     }
@@ -700,6 +761,92 @@ fn update_scroll_position(
             }
         }
     }
+}
+
+fn control_prompt(mut commands: Commands, font: Res<CurrentFont>, target: Res<SetControlTarget>) {
+    let SetControlTarget(target_control, target_idx) = *target;
+    let button_node = Node {
+        width: Val::Px(200.0),
+        height: Val::Px(65.0),
+        margin: UiRect::all(Val::Px(5.0)),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    };
+
+    let button_text_style = (
+        TextFont {
+            font: font.0.clone(),
+            font_size: 33.0,
+            ..default()
+        },
+        TextColor(TEXT_COLOR),
+        TextLayout::new_with_justify(JustifyText::Center),
+    );
+
+    //let button_node_clone = button_node.clone();
+    commands
+        .spawn((
+            Node {
+                display: Display::Flex,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Start,
+                justify_content: JustifyContent::Center,
+                align_self: AlignSelf::Center,
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            FocusPolicy::Block,
+            OnPromptControl,
+            BackgroundColor(BACKGROUND_COLOR_SOLID),
+            ZIndex(2),
+        ))
+        .with_children(|builder| {
+            builder.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                children![(
+                    Text::new("Press any key to bind,\n or click 'Cancel'"),
+                    TextFont {
+                        font: font.0.clone(),
+                        font_size: 67.0,
+                        ..default()
+                    },
+                    TextColor(TEXT_COLOR),
+                    Node {
+                        margin: UiRect::all(Val::Px(50.0)),
+                        ..default()
+                    },
+                ),],
+            ));
+
+            builder.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(80.0),
+                    padding: UiRect::all(Val::Px(5.0)),
+                    position_type: PositionType::Absolute,
+                    align_items: AlignItems::Center,
+                    justify_items: JustifyItems::Center,
+                    align_self: AlignSelf::End,
+                    ..default()
+                },
+                BackgroundColor(BACKGROUND_COLOR),
+                children![(
+                    Button,
+                    button_node.clone(),
+                    BackgroundColor(NORMAL_BUTTON),
+                    ControlsButtonAction::CancelPrompt,
+                    children![(Text::new("Cancel"), button_text_style.clone())],
+                )],
+            ));
+        });
 }
 
 #[derive(Resource)]
@@ -750,16 +897,16 @@ fn control_set_added(
             ZIndex(1),
         ))
         .with_children(|builder| {
-            builder
-                .spawn((
-                    Node {
-                        width: Val::Percent(95.0),
-                        height: Val::Percent(85.0),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    children![(
+            builder.spawn((
+                Node {
+                    width: Val::Percent(95.0),
+                    height: Val::Percent(85.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                children![
+                    (
                         Text::new(format!(
                             "Rebind '{target_control}' {}",
                             (target_idx as u8 + b'A') as char
@@ -774,16 +921,47 @@ fn control_set_added(
                             margin: UiRect::all(Val::Px(50.0)),
                             ..default()
                         },
-                    ),],
-                ))
-                .with_children(|builder| {
-                    builder.spawn((
+                    ),
+                    (
+                        CurrentControl,
+                        Text::new(format!(
+                            "Current: '{}'",
+                            keybind_to_string(controls.get_control(target_control, target_idx))
+                        )),
+                        TextFont {
+                            font: font.0.clone(),
+                            font_size: 67.0,
+                            ..default()
+                        },
+                        TextColor(TEXT_COLOR),
+                        Node {
+                            margin: UiRect::all(Val::Px(50.0)),
+                            ..default()
+                        },
+                    ),
+                    (
                         Button,
                         button_node.clone(),
                         BackgroundColor(NORMAL_BUTTON),
+                        ControlsButtonAction::Prompt(target_control, target_idx),
+                        children![(Text::new("Enter"), button_text_style.clone(),),],
+                    ),
+                    (
+                        Button,
+                        button_node.clone(),
+                        BackgroundColor(NORMAL_BUTTON),
+                        ControlsButtonAction::Clear(target_control, target_idx),
+                        children![(Text::new("Clear"), button_text_style.clone(),),],
+                    ),
+                    (
+                        Button,
+                        button_node.clone(),
+                        BackgroundColor(NORMAL_BUTTON),
+                        ControlsButtonAction::Reset(target_control, target_idx),
                         children![(Text::new("Reset"), button_text_style.clone(),),],
-                    ));
-                });
+                    )
+                ],
+            ));
 
             builder.spawn((
                 Node {
@@ -801,11 +979,28 @@ fn control_set_added(
                     Button,
                     button_node.clone(),
                     BackgroundColor(NORMAL_BUTTON),
-                    ControlsButtonAction::CancelSet,
+                    ControlsButtonAction::CancelSelect,
                     children![(Text::new("Cancel"), button_text_style.clone())],
                 )],
             ));
         });
+}
+
+fn assign_key_input(
+    mut kb_ev: EventReader<KeyboardInput>,
+    mut controls: ResMut<Controls>,
+    target: Res<SetControlTarget>,
+    mut commands: Commands,
+) {
+    for ev in kb_ev.read() {
+        match ev.state {
+            ButtonState::Pressed => {
+                controls.set_control(target.0, target.1, Some(ev.key_code));
+                commands.set_state(PromptControlState::Disabled);
+            }
+            ButtonState::Released => {}
+        }
+    }
 }
 
 /// Helper method to despawn all of the entities with a given component.
