@@ -511,6 +511,7 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                 height: Val::Percent(100.0),
                 align_items: AlignItems::Start,
                 justify_content: JustifyContent::Center,
+                flex_direction: FlexDirection::Column,
                 ..default()
             },
             OnControls,
