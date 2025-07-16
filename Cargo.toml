@@ -73,7 +73,10 @@ inherits = "release"
 opt-level = "s"
 strip = "debuginfo"
 
-[profile.wayland]
+[profile.x11]
+inherits = "dev"
+
+[profile.wasm]
 inherits = "dev"
 
 [features]

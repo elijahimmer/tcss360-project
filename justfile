@@ -1,16 +1,16 @@
 run:
   cargo fmt
-  cargo run -F debug,dev
-
-wayland:
-  cargo fmt
   cargo run --profile wayland -F debug,dev,bevy/wayland
+
+x11:
+  cargo fmt
+  cargo run -F debug,dev
 
 release:
   cargo build --release
 
 wasm:
-  trunk serve --no-default-features --features debug
+  trunk serve --cargo-profile wasm --no-default-features --features debug
 
 wasm-release:
   -rm game.zip

@@ -1,3 +1,5 @@
+//! TODO: Display keybinds as icons/characters and inputs and lists of them.
+
 #[cfg(feature = "sqlite")]
 use crate::prelude::*;
 use bevy::{input::InputSystem, prelude::*};
