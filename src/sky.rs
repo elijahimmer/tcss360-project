@@ -28,8 +28,8 @@ impl Plugin for SkyPlugin {
             .register_type::<SkyTileMap>()
             .register_type::<SkySettings>()
             .insert_resource(SkyRand(RandomSource::from_os_rng()))
-            .add_systems(Startup, spawn_sky)
-            .add_systems(Update, sky_movement);
+            .add_systems(Startup, (spawn_sky, spawn_tile_labels).chain());
+//           .add_systems(Update, sky_movement);
     }
 }
 
@@ -52,6 +52,9 @@ pub struct SkySettings {
     /// The speed of movement in tiles per second, in axial coordinates.
     pub speed: Vec2,
 }
+
+#[derive(Component)]
+struct TileLabel(Entity);
 
 /// Spawns the sky fitting the screen (to an extent).
 fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: ResMut<SkyRand>) {
@@ -102,10 +105,13 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
     });
 }
 
+
+
 /// Moves the sky with an illusion that it is indefinite.
 ///
 /// This system
-///
+
+/*
 fn sky_movement(
     time: Res<Time>,
     sky_movement: ResMut<SkySettings>,
@@ -193,6 +199,64 @@ fn sky_movement(
                     Err(err) => warn!("Failed to get current tile at {new_pos} with {err}"),
                 };
             }
+        }
+    }
+}
+*/
+
+/*
+fn iterate_tiles(
+    tilemap_q: Query<&TileStorage>,
+    tile_q: Query<&mut TilePos>,
+) {
+    for tilemap_storage in tilemap_q.iter() {
+        for tile_entity in tilemap_storage.iter().flatten() {
+            let tile_pos = tile_q.get(*tile_entity).unwrap();
+
+            println!();
+        }
+    }
+}
+*/
+
+fn spawn_tile_labels(
+    mut commands: Commands,
+    tilemap_q: Query<(
+        &Transform,
+        &TilemapType,
+        &TilemapSize,
+        &TilemapGridSize,
+        &TilemapTileSize,
+        &TileStorage,
+        &TilemapAnchor,
+    )>,
+    tile_q: Query<&mut TilePos>,
+) {
+    for (map_transform, map_type, map_size, grid_size, tile_size, tilemap_storage, anchor) in
+        tilemap_q.iter()
+    {
+        for tile_entity in tilemap_storage.iter().flatten() {
+            let tile_pos = tile_q.get(*tile_entity).unwrap();
+            let tile_center = tile_pos
+                .center_in_world(map_size, grid_size, tile_size, map_type, anchor)
+                .extend(1.0);
+            let transform = *map_transform * Transform::from_translation(tile_center);
+
+            let label_entity = commands
+                .spawn((
+                    Text2d::new(format!("{},{}", tile_pos.x, tile_pos.y)),
+                    TextFont {
+                        font_size: 14.0,
+                        ..default()
+                    },
+                    TextColor(Color::BLACK),
+                    TextLayout::new_with_justify(JustifyText::Center),
+                    transform,
+                ))
+                .id();
+            commands
+                .entity(*tile_entity)
+                .insert(TileLabel(label_entity));
         }
     }
 }

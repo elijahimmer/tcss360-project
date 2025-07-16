@@ -71,7 +71,7 @@ fn main() {
             enabled: true,
         },
     });
-
+    
     // foreign plugins
     app.add_plugins(TilemapPlugin)
         // State
