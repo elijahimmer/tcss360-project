@@ -1,10 +1,8 @@
 //! The infinite sky implementation
-use crate::embed_asset;
 use crate::prelude::*;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use rand::{Rng, SeedableRng};
-use std::ops::Range;
 
 const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 100, y: 100 };
 const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48.0, y: 52.0 };
