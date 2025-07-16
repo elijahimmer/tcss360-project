@@ -4,6 +4,7 @@ use crate::prelude::*;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use rand::{Rng, SeedableRng};
+use std::ops::Range;
 
 const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 100, y: 100 };
 const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48.0, y: 52.0 };
@@ -12,8 +13,6 @@ const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
     y: SKY_TILE_SIZE.y * 1.5,
 };
 const SKY_TILE_LAYER: f32 = -1.;
-const SKY_TILE_VARIENT_COUNT: u32 = 8;
-const SKY_TILE_ASSET_LOAD_PATH: &'static str = "embedded://assets/sprites/sky_sheet.png";
 const AXIAL_TRANSLATION_MATRIX: Mat2 =
     Mat2::from_cols_array(&[SQRT_3_2, 1.0 / 3.0, 0.0, 2.0 / 3.0]);
 
@@ -22,7 +21,6 @@ pub struct SkyPlugin;
 
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
-        embed_asset!(app, "assets/sprites/sky_sheet.png");
 
         app.register_type::<SkyTile>()
             .register_type::<SkyTileMap>()
@@ -55,7 +53,7 @@ pub struct SkySettings {
 
 /// Spawns the sky fitting the screen (to an extent).
 fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: ResMut<SkyRand>) {
-    let texture_handle: Handle<Image> = asset_server.load(SKY_TILE_ASSET_LOAD_PATH);
+    let texture_handle: Handle<Image> = asset_server.load(TILE_ASSET_LOAD_PATH);
 
     let tilemap_entity = commands.spawn_empty().id();
     let mut tile_storage = TileStorage::empty(SKY_MAP_SIZE);
@@ -70,9 +68,7 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
                         TileBundle {
                             position: tile_pos,
                             tilemap_id: TilemapId(tilemap_entity),
-                            texture_index: TileTextureIndex(
-                                rng.0.random_range(0..SKY_TILE_VARIENT_COUNT),
-                            ),
+                            texture_index: TileTextureIndex(rng.0.random_range(SKY_TILE_VARIENTS)),
                             ..Default::default()
                         },
                     ))
@@ -187,7 +183,7 @@ fn sky_movement(
             if new_pos.cmplt(IVec2::ZERO).any() || new_pos.cmpge(map_size).any() {
                 match tile_query.get_mut(curr_tile_entity) {
                     Ok(mut curr_tile_texture) => {
-                        let tile_idx = rng.0.random_range(0..SKY_TILE_VARIENT_COUNT);
+                        let tile_idx = rng.0.random_range(SKY_TILE_VARIENTS);
                         *curr_tile_texture = TileTextureIndex(tile_idx);
                     }
                     Err(err) => warn!("Failed to get current tile at {new_pos} with {err}"),

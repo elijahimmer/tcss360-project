@@ -1,10 +1,10 @@
 run:
   cargo fmt
-  cargo run --profile wayland -F debug,dev,bevy/wayland
+  cargo run  -F debug,dev,bevy/wayland
 
 x11:
   cargo fmt
-  cargo run -F debug,dev
+  cargo run --profile x11 -F debug,dev
 
 release:
   cargo build --release

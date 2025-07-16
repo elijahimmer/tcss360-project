@@ -1,5 +1,6 @@
 mod camera;
 mod controls;
+mod consts;
 #[cfg(feature = "sqlite")]
 mod database;
 mod menu;
@@ -17,6 +18,8 @@ pub mod prelude {
         Menu,
         Game,
     }
+
+    pub use consts::*;
 
     pub use crate::camera::CameraPlugin;
     pub use crate::controls::{Control, Controls, ControlsPlugin, InputState};
@@ -41,6 +44,9 @@ use bevy_ecs_tilemap::{/*FrustumCulling, helpers::hex_grid::axial::AxialPos, */ 
 
 fn main() {
     let mut app = App::new();
+
+    // Embed the sprite assets.
+    embed_asset!(app, "assets/sprites/basic_sheet.png");
 
     app.add_plugins(
         DefaultPlugins

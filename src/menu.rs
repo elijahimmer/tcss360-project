@@ -192,8 +192,8 @@ fn menu_action(
                     app_exit_events.write(AppExit::Success);
                 }
                 MenuButtonAction::Play => {
-                    game_state.set(GameState::Game);
                     menu_state.set(MenuState::Disabled);
+                    game_state.set(GameState::Game);
                 }
                 MenuButtonAction::Settings => menu_state.set(MenuState::Settings),
                 MenuButtonAction::Controls => menu_state.set(MenuState::Controls),
