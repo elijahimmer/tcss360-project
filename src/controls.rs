@@ -2,6 +2,7 @@
 
 #[cfg(feature = "sqlite")]
 use crate::prelude::*;
+use bevy::ecs::relationship::{RelatedSpawnerCommands, Relationship};
 use bevy::{input::InputSystem, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::iter::IntoIterator;
@@ -80,13 +81,12 @@ fn update_control_state(
     // Avoid clearing if it's not empty to ensure change detection is not triggered.
     control_state.bypass_change_detection().clear();
 
-    for (control, keybind) in controls.clone().into_iter() {
+    for Keybind(control, keybind) in controls.clone().into_iter() {
+        let keybind = keybind.into_iter().filter_map(|k| k);
         // TODO: Remove vec because for something like a bounded array.
-        let keys = keybind.iter().filter_map(|k| *k).collect::<Vec<_>>();
-
-        let pressed = input_state.any_pressed(keys.clone());
-        let just_pressed = input_state.any_just_pressed(keys.clone());
-        let just_released = input_state.any_just_released(keys);
+        let pressed = input_state.any_pressed(keybind.clone());
+        let just_pressed = input_state.any_just_pressed(keybind.clone());
+        let just_released = input_state.any_just_released(keybind);
 
         if just_pressed {
             control_state.press(control);
@@ -98,11 +98,61 @@ fn update_control_state(
     }
 }
 
+/// All of the information about an individual keybind
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Reflect, Serialize, Deserialize)]
+#[reflect(Debug, Hash, PartialEq, Clone, Serialize, Deserialize)]
+pub struct Keybind(pub Control, pub InputList);
+
+const TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
+
+pub fn input_to_screen<R: Relationship>(
+    font: Handle<Font>,
+    builder: &mut RelatedSpawnerCommands<'_, R>,
+    input: &Option<Input>,
+) {
+    match input {
+        Some(input) => input.to_screen(font, builder),
+        None => {
+            builder.spawn((
+                Text::new("None"),
+                TextFont {
+                    font,
+                    font_size: 33.0,
+                    ..default()
+                },
+                TextColor(TEXT_COLOR),
+                Label,
+                Pickable::IGNORE,
+            ));
+        }
+    }
+}
+impl Keybind {
+    pub fn to_screen<R: Relationship>(
+        &self,
+        font: Handle<Font>,
+        builder: &mut RelatedSpawnerCommands<'_, R>,
+    ) {
+        builder.spawn((
+            Text::new(ron::to_string(self).unwrap()),
+            TextFont {
+                font,
+                font_size: 33.0,
+                ..default()
+            },
+            TextColor(TEXT_COLOR),
+            Label,
+            Pickable::IGNORE,
+        ));
+    }
+}
+
 /// The number of keybinds associated with a given control.
 /// When changed, the update must be reflected in the database
 /// so that we sync all of them correctly.
-const KEYBINDS_LEN: usize = 2;
-pub type Keybind = [Option<Input>; KEYBINDS_LEN];
+const INPUT_LIST_LEN: usize = 2;
+/// An individual set of inputs for a keybind
+pub type InputList = [Option<Input>; INPUT_LIST_LEN];
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Reflect, Serialize, Deserialize)]
 #[reflect(Debug, Hash, PartialEq, Clone, Serialize, Deserialize)]
@@ -112,12 +162,23 @@ pub enum Input {
     Gamepad(GamepadButton),
 }
 
-/// TODO: Find a way to print better for a user to understand.
-///       (and add images?)
-pub fn keybind_to_string(code: Option<Input>) -> String {
-    match code {
-        Some(code) => ron::to_string(&code).unwrap().into(),
-        Option::None => "None".into(),
+impl Input {
+    pub fn to_screen<R: Relationship>(
+        &self,
+        font: Handle<Font>,
+        builder: &mut RelatedSpawnerCommands<'_, R>,
+    ) {
+        builder.spawn((
+            Text::new(ron::to_string(self).unwrap()),
+            TextFont {
+                font,
+                font_size: 33.0,
+                ..default()
+            },
+            TextColor(TEXT_COLOR),
+            Label,
+            Pickable::IGNORE,
+        ));
     }
 }
 
@@ -126,18 +187,18 @@ pub fn keybind_to_string(code: Option<Input>) -> String {
 #[derive(Resource, Reflect, Clone)]
 #[reflect(Resource)]
 pub struct Controls {
-    pub move_up: Keybind,
-    pub move_down: Keybind,
-    pub move_left: Keybind,
-    pub move_right: Keybind,
-    pub zoom_in: Keybind,
-    pub zoom_out: Keybind,
-    pub pause: Keybind,
-    pub select: Keybind,
+    pub move_up: InputList,
+    pub move_down: InputList,
+    pub move_left: InputList,
+    pub move_right: InputList,
+    pub zoom_in: InputList,
+    pub zoom_out: InputList,
+    pub pause: InputList,
+    pub select: InputList,
 }
 
 impl Controls {
-    pub fn get_control(&self, control: Control) -> Keybind {
+    pub fn get_control(&self, control: Control) -> InputList {
         match control {
             Control::MoveUp => self.move_up,
             Control::MoveDown => self.move_down,
@@ -151,13 +212,13 @@ impl Controls {
     }
 
     pub fn get_control_part(&self, control: Control, entry: usize) -> Option<Input> {
-        assert!(entry < KEYBINDS_LEN);
+        assert!(entry < INPUT_LIST_LEN);
 
         (self.get_control(control))[entry]
     }
 
     pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<Input>) {
-        assert!(entry < KEYBINDS_LEN);
+        assert!(entry < INPUT_LIST_LEN);
 
         (match control {
             Control::MoveUp => &mut self.move_up,
@@ -185,7 +246,7 @@ impl Controls {
     }
 
     pub fn reset_control_part(&mut self, control: Control, i: usize) {
-        assert!(i < KEYBINDS_LEN);
+        assert!(i < INPUT_LIST_LEN);
 
         match control {
             Control::MoveUp => self.move_up[i] = DEFAULT_UP_CONTROLS[i],
@@ -255,11 +316,11 @@ impl ToDatabase for Controls {
 }
 
 impl IntoIterator for Controls {
-    type Item = (Control, Keybind);
-    type IntoIter = IntoIter;
+    type Item = Keybind;
+    type IntoIter = ControlsIter;
 
-    fn into_iter(self) -> IntoIter {
-        IntoIter {
+    fn into_iter(self) -> ControlsIter {
+        ControlsIter {
             controls: self,
             current: Some(default()),
         }
@@ -267,25 +328,25 @@ impl IntoIterator for Controls {
 }
 
 #[derive(Default)]
-pub struct IntoIter {
+pub struct ControlsIter {
     controls: Controls,
     current: Option<Control>,
 }
 
-impl Iterator for IntoIter {
-    type Item = (Control, Keybind);
+impl Iterator for ControlsIter {
+    type Item = Keybind;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.current.and_then(|control| {
             let res = match control {
-                Control::MoveUp => (Control::MoveUp, self.controls.move_up),
-                Control::MoveDown => (Control::MoveDown, self.controls.move_down),
-                Control::MoveLeft => (Control::MoveLeft, self.controls.move_left),
-                Control::MoveRight => (Control::MoveRight, self.controls.move_right),
-                Control::ZoomIn => (Control::ZoomIn, self.controls.zoom_in),
-                Control::ZoomOut => (Control::ZoomOut, self.controls.zoom_out),
-                Control::Pause => (Control::Pause, self.controls.pause),
-                Control::Select => (Control::Select, self.controls.select),
+                Control::MoveUp => Keybind(Control::MoveUp, self.controls.move_up),
+                Control::MoveDown => Keybind(Control::MoveDown, self.controls.move_down),
+                Control::MoveLeft => Keybind(Control::MoveLeft, self.controls.move_left),
+                Control::MoveRight => Keybind(Control::MoveRight, self.controls.move_right),
+                Control::ZoomIn => Keybind(Control::ZoomIn, self.controls.zoom_in),
+                Control::ZoomOut => Keybind(Control::ZoomOut, self.controls.zoom_out),
+                Control::Pause => Keybind(Control::Pause, self.controls.pause),
+                Control::Select => Keybind(Control::Select, self.controls.select),
             };
 
             self.current = control.next();
@@ -344,36 +405,36 @@ impl Display for Control {
     }
 }
 
-const DEFAULT_UP_CONTROLS: Keybind = [
+const DEFAULT_UP_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::ArrowUp)),
     Some(Input::Keyboard(KeyCode::KeyW)),
 ];
-const DEFAULT_DOWN_CONTROLS: Keybind = [
+const DEFAULT_DOWN_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::ArrowDown)),
     Some(Input::Keyboard(KeyCode::KeyS)),
 ];
-const DEFAULT_LEFT_CONTROLS: Keybind = [
+const DEFAULT_LEFT_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::ArrowLeft)),
     Some(Input::Keyboard(KeyCode::KeyA)),
 ];
-const DEFAULT_RIGHT_CONTROLS: Keybind = [
+const DEFAULT_RIGHT_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::ArrowRight)),
     Some(Input::Keyboard(KeyCode::KeyD)),
 ];
-const DEFAULT_ZOOM_IN_CONTROLS: Keybind = [Some(Input::Keyboard(KeyCode::Comma)), None];
-const DEFAULT_ZOOM_OUT_CONTROLS: Keybind = [Some(Input::Keyboard(KeyCode::Period)), None];
-const DEFAULT_PAUSE_CONTROLS: Keybind = [
+const DEFAULT_ZOOM_IN_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::Comma)), None];
+const DEFAULT_ZOOM_OUT_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::Period)), None];
+const DEFAULT_PAUSE_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::Escape)),
     Some(Input::Keyboard(KeyCode::Pause)),
 ];
 // TODO: Change this to mouse button left.
-const DEFAULT_SELECT_CONTROLS: Keybind = [Some(Input::Keyboard(KeyCode::KeyA)), None];
+const DEFAULT_SELECT_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::KeyA)), None];
 
 #[cfg(feature = "sqlite")]
-fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) -> Keybind {
+fn query_keybind_or_set(database: &Database, keybind: &str, default: InputList) -> InputList {
     query_keybind_or_set_fallible(database, keybind, default)
         .inspect_err(|err| {
-            warn!("Failed to get keybind: '{keybind}' from sqlite with error: {err}")
+            warn!("Failed to get Keybind: '{keybind}' from sqlite with error: {err}")
         })
         .unwrap_or(default)
 }
@@ -382,8 +443,8 @@ fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) ->
 fn query_keybind_or_set_fallible(
     database: &Database,
     keybind: &str,
-    default: Keybind,
-) -> Result<Keybind, sqlite::Error> {
+    default: InputList,
+) -> Result<InputList, sqlite::Error> {
     Ok(match query_keybind(database, keybind)? {
         Some(kb) => kb,
         Option::None => {
@@ -398,7 +459,7 @@ fn query_keybind_or_set_fallible(
 }
 
 #[cfg(feature = "sqlite")]
-fn query_keybind(database: &Database, keybind: &str) -> Result<Option<Keybind>, sqlite::Error> {
+fn query_keybind(database: &Database, keybind: &str) -> Result<Option<InputList>, sqlite::Error> {
     let query = "SELECT key1,key2 FROM Keybinds WHERE keybind = :keybind";
 
     let mut statement = database.connection.prepare(query)?;
@@ -420,19 +481,21 @@ fn query_keybind(database: &Database, keybind: &str) -> Result<Option<Keybind>, 
     assert!(matches!(statement.next()?, sqlite::State::Done));
 
     Ok(Some([
-        key1.and_then(|v| ron::from_str(&v).ok()),
-        key2.and_then(|v| ron::from_str(&v).ok()),
+        key1.map(|v| ron::from_str::<Input>(&v).unwrap()),
+        key2.map(|v| ron::from_str::<Input>(&v).unwrap()),
     ]))
 }
 
 #[cfg(feature = "sqlite")]
-fn set_keybind(database: &Database, keybind: &str, value: Keybind) -> Result<(), sqlite::Error> {
+fn set_keybind(database: &Database, keybind: &str, value: InputList) -> Result<(), sqlite::Error> {
     let query = "INSERT OR REPLACE INTO Keybinds VALUES (:keybind, :key1, :key2)";
 
     let values = [
-        value[0].as_ref().and_then(|v| ron::to_string(v).ok()),
-        value[1].as_ref().and_then(|v| ron::to_string(v).ok()),
+        value[0].and_then(|v| ron::to_string(&v).ok()),
+        value[1].and_then(|v| ron::to_string(&v).ok()),
     ];
+
+    info!("Setting {keybind} {values:?}");
 
     let mut statement = database.connection.prepare(query)?;
     statement.bind((":keybind", keybind))?;

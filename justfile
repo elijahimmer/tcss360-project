@@ -1,6 +1,6 @@
 run:
   cargo fmt
-  cargo run  -F debug,dev,bevy/wayland
+  cargo run -F debug,dev,bevy/wayland
 
 x11:
   cargo fmt

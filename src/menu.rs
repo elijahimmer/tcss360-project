@@ -1,7 +1,7 @@
 //! TODO: Make the UI hexagon based.
 
-use crate::controls::{Control, keybind_to_string};
-use crate::controls::{Input, Keybind};
+use crate::controls::Control;
+use crate::controls::{Input, Keybind, input_to_screen};
 use crate::embed_asset;
 use crate::prelude::*;
 
@@ -530,9 +530,10 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                 })
                 .observe(update_scroll_position_event)
                 .with_children(|builder| {
-                    controls.clone().into_iter().for_each(|(control, keys)| {
-                        controls_row(builder, font.0.clone(), control, keys)
-                    })
+                    controls
+                        .clone()
+                        .into_iter()
+                        .for_each(|keybind| controls_row(builder, font.0.clone(), keybind))
                 });
 
             builder
@@ -571,12 +572,8 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
         });
 }
 
-fn controls_row(
-    builder: &mut ChildSpawnerCommands<'_>,
-    font: Handle<Font>,
-    control: Control,
-    keys: Keybind,
-) {
+fn controls_row(builder: &mut ChildSpawnerCommands<'_>, font: Handle<Font>, keybind: Keybind) {
+    let Keybind(control, keys) = keybind;
     builder
         .spawn((Node::default(), Pickable::IGNORE))
         .with_children(|builder| {
@@ -608,31 +605,31 @@ fn controls_row(
             controls_button(
                 builder,
                 font.clone(),
-                keybind_to_string(keys[0]),
+                keys[0],
                 ControlsButtonAction::Prompt(control, 0),
                 Val::Px(150.0),
             );
             controls_button(
                 builder,
                 font.clone(),
-                keybind_to_string(keys[1]),
+                keys[1],
                 ControlsButtonAction::Prompt(control, 1),
                 Val::Px(150.0),
             );
-            controls_button(
-                builder,
-                font.clone(),
-                "Reset Both".into(),
-                ControlsButtonAction::ResetBoth(control),
-                Val::Px(125.0),
-            );
+            //controls_button(
+            //    builder,
+            //    font.clone(),
+            //    "Reset Both".into(),
+            //    ControlsButtonAction::ResetBoth(control),
+            //    Val::Px(125.0),
+            //);
         });
 }
 
 fn controls_button(
     builder: &mut ChildSpawnerCommands<'_>,
     font: Handle<Font>,
-    name: String,
+    input: Option<Input>,
     action: ControlsButtonAction,
     width: Val,
 ) {
@@ -662,17 +659,7 @@ fn controls_button(
         ))
         .observe(controls_menu_click)
         .with_children(|builder| {
-            builder.spawn((
-                Text::new(name),
-                TextFont {
-                    font: font.clone(),
-                    font_size: 33.0,
-                    ..default()
-                },
-                TextColor(TEXT_COLOR),
-                Label,
-                Pickable::IGNORE,
-            ));
+            input_to_screen(font.clone(), builder, &input);
         });
 }
 
@@ -719,9 +706,9 @@ fn controls_changed(
         use ControlsButtonAction as C;
         match action {
             C::Prompt(control, idx) => {
-                let mut text = text_query.get_mut(children[0]).unwrap();
+                //let mut text = text_query.get_mut(children[0]).unwrap();
 
-                **text = keybind_to_string(controls.get_control_part(*control, *idx));
+                //**text = keybind_to_string(controls.get_control_part(*control, *idx));
             }
             C::PromptCancel | C::ResetBoth(..) | C::ResetAll => {}
         }
