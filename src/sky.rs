@@ -29,7 +29,7 @@ impl Plugin for SkyPlugin {
             .register_type::<SkySettings>()
             .insert_resource(SkyRand(RandomSource::from_os_rng()))
             .add_systems(Startup, (spawn_sky, spawn_tile_labels).chain());
-//           .add_systems(Update, sky_movement);
+//            .add_systems(Update, (sky_movement));
     }
 }
 
@@ -55,6 +55,10 @@ pub struct SkySettings {
 
 #[derive(Component)]
 struct TileLabel(Entity);
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct TileLabelMap;
 
 /// Spawns the sky fitting the screen (to an extent).
 fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: ResMut<SkyRand>) {
@@ -111,7 +115,7 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
 ///
 /// This system
 
-/*
+
 fn sky_movement(
     time: Res<Time>,
     sky_movement: ResMut<SkySettings>,
@@ -202,7 +206,7 @@ fn sky_movement(
         }
     }
 }
-*/
+
 
 /*
 fn iterate_tiles(
@@ -230,7 +234,7 @@ fn spawn_tile_labels(
         &TileStorage,
         &TilemapAnchor,
     )>,
-    tile_q: Query<&mut TilePos>,
+    tile_q: Query<&mut TilePos, With<SkyTile>>,
 ) {
     for (map_transform, map_type, map_size, grid_size, tile_size, tilemap_storage, anchor) in
         tilemap_q.iter()
