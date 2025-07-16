@@ -31,3 +31,6 @@ target/
 # Wasm build
 /dist
 game.zip
+
+# For kylen
+logs.txt
