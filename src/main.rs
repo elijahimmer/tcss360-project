@@ -7,7 +7,6 @@ mod menu;
 mod sky;
 mod util;
 
-
 pub mod prelude {
     use bevy::prelude::States;
     pub type RandomSource = wyrand::WyRand;
@@ -20,7 +19,7 @@ pub mod prelude {
     }
 
     pub use crate::camera::CameraPlugin;
-    pub use crate::controls::{Controls, ControlsPlugin, Keybind};
+    pub use crate::controls::{Control, Controls, ControlsPlugin, InputState};
     pub use crate::menu::MenuPlugin;
     //pub use crate::save::{Save, SavePlugin};
     #[cfg(feature = "sqlite")]
@@ -52,7 +51,7 @@ fn main() {
                     ..default()
                 }),
                 ..default()
-            })
+            }),
     ); // fallback to nearest sampling
 
     embed_asset!(app, "assets/sprites/basic_sheet.png");
@@ -73,9 +72,9 @@ fn main() {
     });
 
     // foreign plugins
-    app.add_plugins(TilemapPlugin)
-        // State
-        .init_state::<GameState>();
+    app.add_plugins(TilemapPlugin);
+    // State
+    app.init_state::<GameState>();
     // Local Plugins
     #[cfg(feature = "sqlite")]
     app.add_plugins(DatabasePlugin);

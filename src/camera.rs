@@ -7,9 +7,8 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<CameraMovementSettings>()
-            .register_type::<Controls>()
-            .register_type::<MainCamera>()
+        app.register_type::<MainCamera>()
+            .register_type::<CameraMovementSettings>()
             .init_resource::<CameraMovementSettings>()
             .add_systems(Startup, camera_setup)
             .add_systems(
@@ -71,21 +70,8 @@ fn camera_setup(mut commands: Commands) {
     ));
 }
 
-/// Returns a floating point number in the range [0, 1] representing if any of the keys are
-/// pressed
-fn sum_inputs(input: &Res<ButtonInput<KeyCode>>, keys: &[Option<KeyCode>]) -> f32 {
-    keys.into_iter()
-        .map(|key| key.is_some_and(|k| input.pressed(k)) as u8)
-        .sum::<u8>()
-        .clamp(0, 1) as f32
-}
-
-fn pause_game(mut commands: Commands, input: Res<ButtonInput<KeyCode>>, controls: Res<Controls>) {
-    if controls
-        .pause
-        .into_iter()
-        .any(|key| key.is_some_and(|k| input.pressed(k)))
-    {
+fn pause_game(mut commands: Commands, input: Res<InputState>) {
+    if input.just_pressed(Control::Pause) {
         commands.set_state(GameState::Menu);
     }
 }
@@ -94,15 +80,14 @@ fn pause_game(mut commands: Commands, input: Res<ButtonInput<KeyCode>>, controls
 /// on user input.
 fn camera_movement(
     mut transform: Single<&mut Transform, With<MainCamera>>,
-    input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
-    controls: Res<Controls>,
+    input: Res<InputState>,
     time: Res<Time>,
 ) {
-    let movement = Vec2::Y * sum_inputs(&input, &controls.move_up)
-        + Vec2::NEG_Y * sum_inputs(&input, &controls.move_down)
-        + Vec2::NEG_X * sum_inputs(&input, &controls.move_left)
-        + Vec2::X * sum_inputs(&input, &controls.move_right);
+    let movement = Vec2::Y * input.pressed(Control::MoveUp) as u8 as f32
+        + Vec2::NEG_Y * input.pressed(Control::MoveDown) as u8 as f32
+        + Vec2::NEG_X * input.pressed(Control::MoveLeft) as u8 as f32
+        + Vec2::X * input.pressed(Control::MoveRight) as u8 as f32;
 
     let movement = movement * time.delta_secs() * settings.move_speed;
 
@@ -114,9 +99,8 @@ fn camera_movement(
 /// Controls the camera's zoom based on user input.
 fn camera_zoom(
     mut projection: Single<&mut Projection, With<MainCamera>>,
-    input: Res<ButtonInput<KeyCode>>,
     settings: Res<CameraMovementSettings>,
-    controls: Res<Controls>,
+    input: Res<InputState>,
     time: Res<Time>,
 ) {
     let Projection::Orthographic(ref mut projection2d) = **projection else {
@@ -126,11 +110,11 @@ fn camera_zoom(
     let scale = projection2d.scale
         * powf(
             powf(settings.zoom_speed, time.delta_secs()),
-            sum_inputs(&input, &controls.zoom_in),
+            input.pressed(Control::ZoomIn) as u8 as f32,
         )
         * powf(
             powf(1.0 / settings.zoom_speed, time.delta_secs()),
-            sum_inputs(&input, &controls.zoom_out),
+            input.pressed(Control::ZoomOut) as u8 as f32,
         );
 
     projection2d.scale = scale.clamp(settings.zoom_limit.x, settings.zoom_limit.y);

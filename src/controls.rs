@@ -1,13 +1,20 @@
 #[cfg(feature = "sqlite")]
 use crate::prelude::*;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::iter::IntoIterator;
 
 pub struct ControlsPlugin;
 
 impl Plugin for ControlsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_controls);
+        app.add_systems(Startup, setup_controls)
+            .init_resource::<InputState>()
+            .init_resource::<ButtonInput<Input>>()
+            .add_systems(
+                PreUpdate,
+                (update_input_state, update_control_state).chain(),
+            );
 
         #[cfg(feature = "sqlite")]
         app.add_systems(
@@ -24,10 +31,83 @@ fn setup_controls(mut commands: Commands, #[cfg(feature = "sqlite")] database: R
     commands.insert_resource(Controls::default());
 }
 
-const KEYBINDS_LEN: usize = 2;
-pub type Keybind = [Option<KeyCode>; KEYBINDS_LEN];
+pub type InputState = ButtonInput<Control>;
 
-pub fn keybind_to_string(code: Option<KeyCode>) -> String {
+fn update_input_state(
+    mut input_state: ResMut<ButtonInput<Input>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    gamepad: Query<&Gamepad>,
+) {
+    input_state.bypass_change_detection().clear();
+
+    for pressed in keyboard.get_just_pressed() {
+        input_state.press(Input::Keyboard(*pressed));
+    }
+
+    for released in keyboard.get_just_released() {
+        input_state.release(Input::Keyboard(*released));
+    }
+
+    for pressed in mouse.get_just_pressed() {
+        input_state.press(Input::Mouse(*pressed));
+    }
+
+    for released in mouse.get_just_released() {
+        input_state.release(Input::Mouse(*released));
+    }
+
+    for gamepad in gamepad.iter() {
+        for pressed in gamepad.digital().get_just_pressed() {
+            input_state.press(Input::Gamepad(*pressed));
+        }
+
+        for released in gamepad.digital().get_just_released() {
+            input_state.release(Input::Gamepad(*released));
+        }
+    }
+}
+
+fn update_control_state(
+    mut control_state: ResMut<InputState>,
+    input_state: Res<ButtonInput<Input>>,
+    controls: Res<Controls>,
+) {
+    for (control, keybind) in controls.clone().into_iter() {
+        // TODO: Remove vec because for something like a bounded array.
+        let keys = keybind.iter().filter_map(|k| *k).collect::<Vec<_>>();
+
+        let pressed = input_state.any_pressed(keys.clone());
+        let just_pressed = input_state.any_just_pressed(keys.clone());
+        let just_released = input_state.any_just_released(keys);
+
+        if just_pressed {
+            control_state.press(control);
+        }
+
+        if just_released && !pressed {
+            control_state.release(control);
+        }
+    }
+}
+
+/// The number of keybinds associated with a given control.
+/// When changed, the update must be reflected in the database
+/// so that we sync all of them correctly.
+const KEYBINDS_LEN: usize = 2;
+pub type Keybind = [Option<Input>; KEYBINDS_LEN];
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Reflect, Serialize, Deserialize)]
+#[reflect(Debug, Hash, PartialEq, Clone, Serialize, Deserialize)]
+pub enum Input {
+    Keyboard(KeyCode),
+    Mouse(MouseButton),
+    Gamepad(GamepadButton),
+}
+
+/// TODO: Find a way to print better for a user to understand.
+///       (and add images?)
+pub fn keybind_to_string(code: Option<Input>) -> String {
     match code {
         Some(code) => ron::to_string(&code).unwrap().into(),
         Option::None => "None".into(),
@@ -50,10 +130,8 @@ pub struct Controls {
 }
 
 impl Controls {
-    pub fn get_control(&self, control: Control, entry: usize) -> Option<KeyCode> {
-        assert!(entry < KEYBINDS_LEN);
-
-        (match control {
+    pub fn get_control(&self, control: Control) -> Keybind {
+        match control {
             Control::MoveUp => self.move_up,
             Control::MoveDown => self.move_down,
             Control::MoveLeft => self.move_left,
@@ -62,9 +140,16 @@ impl Controls {
             Control::ZoomOut => self.zoom_out,
             Control::Pause => self.pause,
             Control::Select => self.select,
-        })[entry]
+        }
     }
-    pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<KeyCode>) {
+
+    pub fn get_control_part(&self, control: Control, entry: usize) -> Option<Input> {
+        assert!(entry < KEYBINDS_LEN);
+
+        (self.get_control(control))[entry]
+    }
+
+    pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<Input>) {
         assert!(entry < KEYBINDS_LEN);
 
         (match control {
@@ -203,7 +288,8 @@ impl Iterator for IntoIter {
     }
 }
 
-#[derive(Default, Eq, PartialEq, Ord, PartialOrd, Hash, Clone, Copy)]
+#[derive(Default, Debug, Hash, PartialEq, Eq, Clone, Copy, Reflect, Serialize, Deserialize)]
+#[reflect(Default, Debug, Hash, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Control {
     #[default]
     MoveUp,
@@ -251,15 +337,30 @@ impl Display for Control {
     }
 }
 
-const DEFAULT_UP_CONTROLS: Keybind = [Some(KeyCode::ArrowUp), Some(KeyCode::KeyW)];
-const DEFAULT_DOWN_CONTROLS: Keybind = [Some(KeyCode::ArrowDown), Some(KeyCode::KeyS)];
-const DEFAULT_LEFT_CONTROLS: Keybind = [Some(KeyCode::ArrowLeft), Some(KeyCode::KeyA)];
-const DEFAULT_RIGHT_CONTROLS: Keybind = [Some(KeyCode::ArrowRight), Some(KeyCode::KeyD)];
-const DEFAULT_ZOOM_IN_CONTROLS: Keybind = [Some(KeyCode::Comma), None];
-const DEFAULT_ZOOM_OUT_CONTROLS: Keybind = [Some(KeyCode::Period), None];
-const DEFAULT_PAUSE_CONTROLS: Keybind = [Some(KeyCode::Escape), Some(KeyCode::Pause)];
+const DEFAULT_UP_CONTROLS: Keybind = [
+    Some(Input::Keyboard(KeyCode::ArrowUp)),
+    Some(Input::Keyboard(KeyCode::KeyW)),
+];
+const DEFAULT_DOWN_CONTROLS: Keybind = [
+    Some(Input::Keyboard(KeyCode::ArrowDown)),
+    Some(Input::Keyboard(KeyCode::KeyS)),
+];
+const DEFAULT_LEFT_CONTROLS: Keybind = [
+    Some(Input::Keyboard(KeyCode::ArrowLeft)),
+    Some(Input::Keyboard(KeyCode::KeyA)),
+];
+const DEFAULT_RIGHT_CONTROLS: Keybind = [
+    Some(Input::Keyboard(KeyCode::ArrowRight)),
+    Some(Input::Keyboard(KeyCode::KeyD)),
+];
+const DEFAULT_ZOOM_IN_CONTROLS: Keybind = [Some(Input::Keyboard(KeyCode::Comma)), None];
+const DEFAULT_ZOOM_OUT_CONTROLS: Keybind = [Some(Input::Keyboard(KeyCode::Period)), None];
+const DEFAULT_PAUSE_CONTROLS: Keybind = [
+    Some(Input::Keyboard(KeyCode::Escape)),
+    Some(Input::Keyboard(KeyCode::Pause)),
+];
 // TODO: Change this to mouse button left.
-const DEFAULT_SELECT_CONTROLS: Keybind = [Some(KeyCode::KeyA), None];
+const DEFAULT_SELECT_CONTROLS: Keybind = [Some(Input::Keyboard(KeyCode::KeyA)), None];
 
 #[cfg(feature = "sqlite")]
 fn query_keybind_or_set(database: &Database, keybind: &str, default: Keybind) -> Keybind {
