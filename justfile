@@ -13,9 +13,12 @@ wasm:
   trunk serve --no-default-features --features debug
 
 wasm-release:
-  rm game.zip
+  -rm game.zip
   trunk build --cargo-profile wasm-release --no-default-features
   zip game.zip dist -r
+
+wasm-release-run: wasm-release
+  trunk serve --cargo-profile wasm-release --no-default-features
 
 clean:
   -rm game.zip result

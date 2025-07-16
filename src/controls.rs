@@ -1,6 +1,6 @@
 #[cfg(feature = "sqlite")]
 use crate::prelude::*;
-use bevy::prelude::*;
+use bevy::{input::InputSystem, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::iter::IntoIterator;
 
@@ -13,7 +13,9 @@ impl Plugin for ControlsPlugin {
             .init_resource::<ButtonInput<Input>>()
             .add_systems(
                 PreUpdate,
-                (update_input_state, update_control_state).chain(),
+                (update_input_state, update_control_state)
+                    .chain()
+                    .after(InputSystem),
             );
 
         #[cfg(feature = "sqlite")]
@@ -73,6 +75,9 @@ fn update_control_state(
     input_state: Res<ButtonInput<Input>>,
     controls: Res<Controls>,
 ) {
+    // Avoid clearing if it's not empty to ensure change detection is not triggered.
+    control_state.bypass_change_detection().clear();
+
     for (control, keybind) in controls.clone().into_iter() {
         // TODO: Remove vec because for something like a bounded array.
         let keys = keybind.iter().filter_map(|k| *k).collect::<Vec<_>>();

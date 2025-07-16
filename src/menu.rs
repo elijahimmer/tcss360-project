@@ -36,13 +36,14 @@ pub struct MenuPlugin;
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         embed_asset!(app, "assets/fonts/Ithaca/Ithaca-LVB75.ttf");
-        app.register_system(control_prompt);
+
         app.init_state::<MenuState>()
             .add_systems(Startup, load_font)
             .add_systems(
                 Update,
                 (menu_action, button_highlight).run_if(in_state(GameState::Menu)),
             )
+            .add_systems(Update, escape_out.run_if(in_state(GameState::Menu)))
             .add_systems(OnEnter(GameState::Menu), menu_screen_enter)
             .add_systems(OnEnter(MenuState::Main), main_enter)
             .add_systems(OnExit(MenuState::Main), despawn_screen::<OnMenuScreen>)
@@ -52,27 +53,37 @@ impl Plugin for MenuPlugin {
             .add_systems(OnExit(MenuState::Display), despawn_screen::<OnDisplay>)
             .add_systems(OnEnter(MenuState::Sound), sound_enter)
             .add_systems(OnExit(MenuState::Sound), despawn_screen::<OnSoundScreen>)
-            .add_systems(OnEnter(MenuState::Controls), controls_enter)
-            .add_systems(OnExit(MenuState::Controls), despawn_screen::<OnControls>)
             .add_systems(
-                Update,
+                OnTransition {
+                    exited: MenuState::Settings,
+                    entered: MenuState::Controls,
+                },
+                controls_enter,
+            )
+            .add_systems(
+                OnTransition {
+                    exited: MenuState::Controls,
+                    entered: MenuState::Settings,
+                },
+                despawn_screen::<OnControls>,
+            )
+            .add_systems(OnEnter(MenuState::ControlPrompt), control_prompt_enter)
+            .add_systems(
+                OnExit(MenuState::ControlPrompt),
                 (
-                    controls_changed.run_if(resource_exists_and_changed::<Controls>),
-                    //controls_menu_action,
-                )
-                    .run_if(in_state(MenuState::Controls)),
+                    despawn_screen::<OnControlPrompt>,
+                    remove_control_prompt_target,
+                ),
             )
             .add_systems(
                 Update,
-                (
-                    control_prompt.run_if(resource_added::<ControlPromptTarget>),
-                    assign_key_input.run_if(
-                        resource_exists::<ControlPromptTarget>
-                            .and(not(resource_added::<ControlPromptTarget>)),
-                    ),
-                    despawn_screen::<OnControlPrompt>
-                        .run_if(resource_removed::<ControlPromptTarget>),
+                controls_changed.run_if(
+                    in_state(MenuState::Controls).and(resource_exists_and_changed::<Controls>),
                 ),
+            )
+            .add_systems(
+                Update,
+                assign_key_input.run_if(in_state(MenuState::ControlPrompt)),
             );
     }
 }
@@ -92,6 +103,7 @@ enum MenuState {
     Display,
     Sound,
     Controls,
+    ControlPrompt,
 }
 
 #[derive(Component)]
@@ -134,6 +146,19 @@ fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
 // Tag component used to mark which setting is currently selected
 #[derive(Component)]
 struct SelectedOption;
+
+fn escape_out(mut commands: Commands, menu_state: Res<State<MenuState>>, key: Res<InputState>) {
+    if key.just_pressed(Control::Pause) {
+        use MenuState as M;
+        match *menu_state.get() {
+            // TODO: Implement title screen and pausing separately.
+            M::Disabled | M::Main => {}
+            M::Settings => commands.set_state(MenuState::Main),
+            M::Sound | M::Display | M::Controls => commands.set_state(MenuState::Settings),
+            M::ControlPrompt => {}
+        }
+    }
+}
 
 fn button_highlight(
     mut interaction_query: Query<
@@ -483,7 +508,6 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                 height: Val::Percent(100.0),
                 align_items: AlignItems::Start,
                 justify_content: JustifyContent::Center,
-                flex_direction: FlexDirection::Column,
                 ..default()
             },
             OnControls,
@@ -517,6 +541,7 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                         width: Val::Percent(100.0),
                         height: Val::Px(80.0),
                         padding: UiRect::all(Val::Px(5.0)),
+                        position_type: PositionType::Absolute,
                         align_items: AlignItems::Center,
                         justify_items: JustifyItems::Center,
                         align_self: AlignSelf::End,
@@ -524,7 +549,6 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                     },
                     FocusPolicy::Block,
                     BackgroundColor(BACKGROUND_COLOR),
-                    children![],
                 ))
                 .with_children(|builder| {
                     builder.spawn((
@@ -540,7 +564,7 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                             button_node.clone(),
                             BackgroundColor(NORMAL_BUTTON),
                             ControlsButtonAction::ResetAll,
-                            children![(Text::new("ResetAll"), button_text_style.clone())],
+                            children![(Text::new("Reset All"), button_text_style.clone())],
                         ))
                         .observe(controls_menu_click);
                 });
@@ -659,26 +683,28 @@ fn controls_menu_click(
     target_query: Query<&ControlsButtonAction>,
 ) {
     if let Ok(action) = target_query.get(click.target()) {
+        use ControlsButtonAction as C;
+        use PointerButton as P;
         match (click.button, action) {
-            (PointerButton::Primary, ControlsButtonAction::Prompt(control, entry)) => {
-                commands.insert_resource(ControlPromptTarget(*control, *entry))
+            (P::Primary, C::Prompt(control, entry)) => {
+                commands.insert_resource(ControlPromptTarget(*control, *entry));
+                commands.set_state(MenuState::ControlPrompt);
             }
-            (PointerButton::Secondary, ControlsButtonAction::Prompt(control, entry)) => {
+            (P::Secondary, C::Prompt(control, entry)) => {
                 controls.set_control(*control, *entry, None)
             }
-            (PointerButton::Middle, ControlsButtonAction::Prompt(control, entry)) => {
-                controls.reset_control_part(*control, *entry)
-            }
-            (PointerButton::Primary, ControlsButtonAction::PromptCancel) => {
-                commands.remove_resource::<ControlPromptTarget>()
-            }
-            (_, ControlsButtonAction::PromptCancel) => {}
-            (PointerButton::Primary, ControlsButtonAction::ResetBoth(control)) => {
+            (P::Middle, C::Prompt(control, entry)) => controls.reset_control_part(*control, *entry),
+
+            (P::Primary, C::PromptCancel) => commands.set_state(MenuState::Controls),
+            (_, C::PromptCancel) => {}
+
+            (P::Primary, ControlsButtonAction::ResetBoth(control)) => {
                 controls.reset_control(*control)
             }
-            (_, ControlsButtonAction::ResetBoth(..)) => {}
-            (PointerButton::Primary, ControlsButtonAction::ResetAll) => controls.reset_controls(),
-            (_, ControlsButtonAction::ResetAll) => {}
+            (_, C::ResetBoth(..)) => {}
+
+            (P::Primary, ControlsButtonAction::ResetAll) => controls.reset_controls(),
+            (_, C::ResetAll) => {}
         }
     }
     click.propagate(false);
@@ -690,20 +716,23 @@ fn controls_changed(
     mut text_query: Query<&mut Text>,
 ) {
     for (action, children) in button.iter() {
+        use ControlsButtonAction as C;
         match action {
-            ControlsButtonAction::Prompt(control, idx) => {
+            C::Prompt(control, idx) => {
                 let mut text = text_query.get_mut(children[0]).unwrap();
 
                 **text = keybind_to_string(controls.get_control_part(*control, *idx));
             }
-            ControlsButtonAction::PromptCancel
-            | ControlsButtonAction::ResetBoth(..)
-            | ControlsButtonAction::ResetAll => {}
+            C::PromptCancel | C::ResetBoth(..) | C::ResetAll => {}
         }
     }
 }
 
-fn control_prompt(mut commands: Commands, font: Res<CurrentFont>) {
+fn remove_control_prompt_target(mut commands: Commands) {
+    commands.remove_resource::<ControlPromptTarget>();
+}
+
+fn control_prompt_enter(mut commands: Commands, font: Res<CurrentFont>) {
     let button_text_style = (
         TextFont {
             font: font.0.clone(),
@@ -803,7 +832,7 @@ fn assign_key_input(
         match ev.state {
             ButtonState::Pressed => {
                 controls.set_control(target.0, target.1, Some(Input::Keyboard(ev.key_code)));
-                commands.remove_resource::<ControlPromptTarget>();
+                commands.set_state(MenuState::Controls);
                 return;
             }
             ButtonState::Released => {}
@@ -817,7 +846,7 @@ fn assign_key_input(
                     for (_pointer, pointer_map) in hover_map.iter() {
                         for (entity, _hit) in pointer_map.iter() {
                             if let Ok(_) = cancel_button_query.get(*entity) {
-                                commands.remove_resource::<ControlPromptTarget>();
+                                commands.set_state(MenuState::Controls);
                                 return;
                             }
                         }
@@ -825,7 +854,7 @@ fn assign_key_input(
                 }
 
                 controls.set_control(target.0, target.1, Some(Input::Mouse(ev.button)));
-                commands.remove_resource::<ControlPromptTarget>();
+                commands.set_state(MenuState::Controls);
                 return;
             }
             ButtonState::Released => {}
@@ -836,7 +865,7 @@ fn assign_key_input(
         match ev.state {
             ButtonState::Pressed => {
                 controls.set_control(target.0, target.1, Some(Input::Gamepad(ev.button)));
-                commands.remove_resource::<ControlPromptTarget>();
+                commands.set_state(MenuState::Controls);
                 return;
             }
             ButtonState::Released => {}
