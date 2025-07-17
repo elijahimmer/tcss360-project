@@ -209,22 +209,6 @@ pub enum OpenError {
 }
 
 #[derive(Error, Debug)]
-pub enum GetKvError {
-    #[error("Failed to deserialize value with error `{0}`")]
-    DeserializerError(#[from] ron::error::SpannedError),
-    #[error("SQLite error occured: `{0}`")]
-    DatabaseError(#[from] DatabaseError),
-}
-
-#[derive(Error, Debug)]
-pub enum SetKvError {
-    #[error("Failed to serialize value with error `{0}`")]
-    SerializeError(#[from] ron::Error),
-    #[error("SQLite error occured: `{0}`")]
-    DatabaseError(#[from] DatabaseError),
-}
-
-#[derive(Error, Debug)]
 pub enum CheckVersionError {
     #[error("No version found in database!")]
     VersionNotFound,
@@ -239,6 +223,22 @@ pub enum VersionCompatability {
     Future(Version),
     Migratable(Version),
     Incompatable(Version),
+}
+
+#[derive(Error, Debug)]
+pub enum GetKvError {
+    #[error("Failed to deserialize value with error `{0}`")]
+    DeserializerError(#[from] ron::error::SpannedError),
+    #[error("SQLite error occured: `{0}`")]
+    DatabaseError(#[from] DatabaseError),
+}
+
+#[derive(Error, Debug)]
+pub enum SetKvError {
+    #[error("Failed to serialize value with error `{0}`")]
+    SerializeError(#[from] ron::Error),
+    #[error("SQLite error occured: `{0}`")]
+    DatabaseError(#[from] DatabaseError),
 }
 
 fn check_version(db: &Database) -> Result<VersionCompatability, CheckVersionError> {
@@ -358,17 +358,11 @@ fn backup_database() -> Result<(), BackupError> {
     db_path.push("database.sqlite");
 
     let mut backup_path = get_default_db_directory();
-    backup_path.push(format!(
-        "{}_database.sqlite.backup",
-        chrono::offset::Utc::now().format("%+")
-    ));
+    backup_path.push(format!("{}_database.sqlite.backup", chrono::offset::Utc::now().format("%+")));
 
     // While theoretically now bounded, this should be bounded in practice.
     while backup_path.exists() {
-        backup_path.set_file_name(format!(
-            "{}-database.sqlite.backup",
-            chrono::offset::Utc::now().format("%+")
-        ));
+        backup_path.set_file_name(format!("{}-database.sqlite.backup", chrono::offset::Utc::now().format("%+")));
     }
 
     std::fs::copy(db_path, backup_path)?;

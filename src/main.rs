@@ -26,6 +26,7 @@ pub mod prelude {
     pub use crate::camera::CameraPlugin;
     pub use crate::colors::{Colors, ColorsPlugin};
     pub use crate::controls::{Control, Controls, ControlsPlugin, InputState};
+    pub use crate::colors::{Colors, ColorsPlugin};
     pub use crate::menu::MenuPlugin;
     //pub use crate::save::{Save, SavePlugin};
     pub use crate::database::{Database, DatabaseError, DatabasePlugin, FromDatabase, ToDatabase};
