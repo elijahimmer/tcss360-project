@@ -568,6 +568,21 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                             children![(Text::new("Reset All"), button_text_style.clone())],
                         ))
                         .observe(controls_menu_click);
+                    builder.spawn((
+                        Text::new(
+                            "Note: The keys show are based on the physical key and may not reflect the keyboard input in a text box.",
+                        ),
+                        (
+                            TextFont {
+                                font: font.0.clone(),
+                                font_size: 18.0,
+                                ..default()
+                            },
+                            TextColor(TEXT_COLOR),
+                            TextLayout::new_with_justify(JustifyText::Center),
+                        ),
+                        Pickable::IGNORE,
+                    ));
                 });
         });
 }

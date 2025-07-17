@@ -429,7 +429,7 @@ const DEFAULT_ZOOM_IN_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::Comma
 const DEFAULT_ZOOM_OUT_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::Period)), None];
 const DEFAULT_PAUSE_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::Escape)),
-    Some(Input::Keyboard(KeyCode::Pause)),
+    Some(Input::Keyboard(KeyCode::CapsLock)),
 ];
 // TODO: Change this to mouse button left.
 const DEFAULT_SELECT_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::KeyA)), None];
