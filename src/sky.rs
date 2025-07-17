@@ -5,10 +5,9 @@ use bevy_ecs_tilemap::prelude::*;
 use rand::{Rng, SeedableRng};
 
 const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 100, y: 100 };
-const SKY_TILE_SIZE: TilemapTileSize = TilemapTileSize { x: 48.0, y: 52.0 };
 const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
-    x: SKY_TILE_SIZE.x,
-    y: SKY_TILE_SIZE.y * 1.5,
+    x: TILE_SIZE.x,
+    y: TILE_SIZE.y * 1.5,
 };
 const SKY_TILE_LAYER: f32 = -1.;
 const AXIAL_TRANSLATION_MATRIX: Mat2 =
@@ -78,12 +77,12 @@ fn spawn_sky(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: Re
     commands.entity(tilemap_entity).insert((
         SkyTileMap,
         TilemapBundle {
-            grid_size: SKY_TILE_SIZE.into(),
+            grid_size: TILE_SIZE.into(),
             map_type: TilemapType::Hexagon(HexCoordSystem::Row),
             size: SKY_MAP_SIZE,
             storage: tile_storage,
             texture: TilemapTexture::Single(texture_handle),
-            tile_size: SKY_TILE_SIZE,
+            tile_size: TILE_SIZE,
             anchor: TilemapAnchor::Center,
             transform: Transform::from_xyz(0., 0., SKY_TILE_LAYER),
             ..Default::default()
