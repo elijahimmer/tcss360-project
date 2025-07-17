@@ -198,7 +198,20 @@ pub struct Controls {
 }
 
 impl Controls {
-    pub fn get_control(&self, control: Control) -> InputList {
+    pub fn get_control_mut(&mut self, control: Control) -> &mut Keybind {
+        match control {
+            Control::MoveUp => &mut self.move_up,
+            Control::MoveDown => &mut self.move_down,
+            Control::MoveLeft => &mut self.move_left,
+            Control::MoveRight => &mut self.move_right,
+            Control::ZoomIn => &mut self.zoom_in,
+            Control::ZoomOut => &mut self.zoom_out,
+            Control::Pause => &mut self.pause,
+            Control::Select => &mut self.select,
+        }
+    }
+
+    pub fn get_control(&self, control: Control) -> Keybind {
         match control {
             Control::MoveUp => self.move_up,
             Control::MoveDown => self.move_down,
@@ -220,44 +233,35 @@ impl Controls {
     pub fn set_control(&mut self, control: Control, entry: usize, bind: Option<Input>) {
         assert!(entry < INPUT_LIST_LEN);
 
-        (match control {
-            Control::MoveUp => &mut self.move_up,
-            Control::MoveDown => &mut self.move_down,
-            Control::MoveLeft => &mut self.move_left,
-            Control::MoveRight => &mut self.move_right,
-            Control::ZoomIn => &mut self.zoom_in,
-            Control::ZoomOut => &mut self.zoom_out,
-            Control::Pause => &mut self.pause,
-            Control::Select => &mut self.select,
-        })[entry] = bind;
+        self.get_control_mut(control)[entry] = bind;
     }
 
     pub fn reset_control(&mut self, control: Control) {
-        match control {
-            Control::MoveUp => self.move_up = DEFAULT_UP_CONTROLS,
-            Control::MoveDown => self.move_down = DEFAULT_DOWN_CONTROLS,
-            Control::MoveLeft => self.move_left = DEFAULT_LEFT_CONTROLS,
-            Control::MoveRight => self.move_right = DEFAULT_RIGHT_CONTROLS,
-            Control::ZoomIn => self.zoom_in = DEFAULT_ZOOM_IN_CONTROLS,
-            Control::ZoomOut => self.zoom_out = DEFAULT_ZOOM_OUT_CONTROLS,
-            Control::Pause => self.pause = DEFAULT_PAUSE_CONTROLS,
-            Control::Select => self.select = DEFAULT_SELECT_CONTROLS,
+        *self.get_control_mut(control) = match control {
+            Control::MoveUp => DEFAULT_UP_CONTROLS,
+            Control::MoveDown => DEFAULT_DOWN_CONTROLS,
+            Control::MoveLeft => DEFAULT_LEFT_CONTROLS,
+            Control::MoveRight => DEFAULT_RIGHT_CONTROLS,
+            Control::ZoomIn => DEFAULT_ZOOM_IN_CONTROLS,
+            Control::ZoomOut => DEFAULT_ZOOM_OUT_CONTROLS,
+            Control::Pause => DEFAULT_PAUSE_CONTROLS,
+            Control::Select => DEFAULT_SELECT_CONTROLS,
         }
     }
 
     pub fn reset_control_part(&mut self, control: Control, i: usize) {
         assert!(i < INPUT_LIST_LEN);
 
-        match control {
-            Control::MoveUp => self.move_up[i] = DEFAULT_UP_CONTROLS[i],
-            Control::MoveDown => self.move_down[i] = DEFAULT_DOWN_CONTROLS[i],
-            Control::MoveLeft => self.move_left[i] = DEFAULT_LEFT_CONTROLS[i],
-            Control::MoveRight => self.move_right[i] = DEFAULT_RIGHT_CONTROLS[i],
-            Control::ZoomIn => self.zoom_in[i] = DEFAULT_ZOOM_IN_CONTROLS[i],
-            Control::ZoomOut => self.zoom_out[i] = DEFAULT_ZOOM_OUT_CONTROLS[i],
-            Control::Pause => self.pause[i] = DEFAULT_PAUSE_CONTROLS[i],
-            Control::Select => self.select[i] = DEFAULT_SELECT_CONTROLS[i],
-        }
+        self.get_control_mut(control)[i] = match control {
+            Control::MoveUp => DEFAULT_UP_CONTROLS,
+            Control::MoveDown => DEFAULT_DOWN_CONTROLS,
+            Control::MoveLeft => DEFAULT_LEFT_CONTROLS,
+            Control::MoveRight => DEFAULT_RIGHT_CONTROLS,
+            Control::ZoomIn => DEFAULT_ZOOM_IN_CONTROLS,
+            Control::ZoomOut => DEFAULT_ZOOM_OUT_CONTROLS,
+            Control::Pause => DEFAULT_PAUSE_CONTROLS,
+            Control::Select => DEFAULT_SELECT_CONTROLS,
+        }[i];
     }
 
     pub fn reset_controls(&mut self) {
