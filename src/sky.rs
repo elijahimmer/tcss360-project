@@ -3,7 +3,7 @@ use crate::prelude::*;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use rand::{Rng, SeedableRng};
-use crate::tiles::spawn_tile_labels;
+//use crate::tiles::spawn_tile_labels;
 
 const SKY_MAP_SIZE: TilemapSize = TilemapSize { x: 100, y: 100 };
 const SKY_TILE_SIZE_LOOP_THRESHOLD: Vec2 = Vec2 {
@@ -23,8 +23,8 @@ impl Plugin for SkyPlugin {
             .register_type::<SkyTileMap>()
             .register_type::<SkySettings>()
             .insert_resource(SkyRand(RandomSource::from_os_rng()))
-            .add_systems(Startup, (spawn_sky, spawn_tile_labels::<SkyTileMap, SkyTile>).chain());
-        //            .add_systems(Update, sky_movement);
+            .add_systems(Startup, spawn_sky)
+            .add_systems(Update, sky_movement);
     }
 }
 

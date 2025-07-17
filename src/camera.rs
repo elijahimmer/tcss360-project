@@ -51,9 +51,7 @@ impl Default for CameraMovementSettings {
             move_speed: 300.0,
             zoom_speed: 4.0,
             move_area: Mat2::from_cols_array_2d(&[[-200.0, 200.0]; 2]),
-
-            // change to 1.0
-            zoom_limit: Vec2::new(0.25, 1000.0),
+            zoom_limit: Vec2::new(0.25, 1.0),
         }
     }
 }

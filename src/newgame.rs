@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::helpers::hex_grid::axial::AxialPos;
 use bevy_ecs_tilemap::prelude::*;
 use rand::{Rng, SeedableRng};
-use crate::tiles::spawn_tile_labels;
+//use crate::tiles::spawn_tile_labels;
 
 pub struct NewGamePlugin;
 
@@ -14,10 +14,7 @@ const RADIUS: u32 = 10;
 impl Plugin for NewGamePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(TileRand(RandomSource::from_os_rng()))
-            .add_systems(
-                OnEnter(GameState::Game),
-                (spawn_room, spawn_tile_labels::<RoomTileMap, RoomTile>).chain(),
-            );
+            .add_systems(OnEnter(GameState::Game), spawn_room);
     }
 }
 
@@ -80,4 +77,3 @@ fn spawn_room(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: R
         },
     ));
 }
-
