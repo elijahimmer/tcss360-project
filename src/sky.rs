@@ -19,7 +19,6 @@ pub struct SkyPlugin;
 
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
-
         app.register_type::<SkyTile>()
             .register_type::<SkyTileMap>()
             .register_type::<SkySettings>()

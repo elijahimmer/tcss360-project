@@ -1,6 +1,6 @@
 mod camera;
-mod controls;
 mod consts;
+mod controls;
 #[cfg(feature = "sqlite")]
 mod database;
 mod menu;
@@ -45,7 +45,6 @@ use bevy_ecs_tilemap::{/*FrustumCulling, helpers::hex_grid::axial::AxialPos, */ 
 fn main() {
     let mut app = App::new();
 
-
     app.add_plugins(
         DefaultPlugins
             .set(ImagePlugin::default_nearest())
@@ -60,7 +59,7 @@ fn main() {
 
     // Embed the sprite assets.
     embed_asset!(app, "assets/sprites/basic_sheet.png");
-    
+
     #[cfg(feature = "debug")]
     app.add_plugins(FpsOverlayPlugin {
         config: FpsOverlayConfig {

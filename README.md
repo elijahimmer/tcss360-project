@@ -28,7 +28,7 @@ And the following tools:
 
 Once all of these are available (you should have many already installed), run:
 ```sh
-cargo run
+cargo run --release
 ```
 
 This will download all of the rust dependencies
