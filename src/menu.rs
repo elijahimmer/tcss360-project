@@ -726,7 +726,8 @@ fn controls_changed(
                 }
                 commands
                     .get_entity(entity)
-                    .unwrap()
+                    .expect("It was just clicked, it should be alive?")
+                    .remove_children(children)
                     .with_children(|builder| input_to_screen(font.0.clone(), builder, &key));
             }
             C::PromptCancel | C::ResetBoth(..) | C::ResetAll => {}
