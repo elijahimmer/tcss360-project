@@ -198,7 +198,7 @@ pub struct Controls {
 }
 
 impl Controls {
-    pub fn get_control_mut(&mut self, control: Control) -> &mut Keybind {
+    pub fn get_control_mut(&mut self, control: Control) -> &mut InputList {
         match control {
             Control::MoveUp => &mut self.move_up,
             Control::MoveDown => &mut self.move_down,
@@ -211,7 +211,7 @@ impl Controls {
         }
     }
 
-    pub fn get_control(&self, control: Control) -> Keybind {
+    pub fn get_control(&self, control: Control) -> InputList {
         match control {
             Control::MoveUp => self.move_up,
             Control::MoveDown => self.move_down,
