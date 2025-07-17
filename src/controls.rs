@@ -499,8 +499,6 @@ fn set_keybind(database: &Database, keybind: &str, value: InputList) -> Result<(
         value[1].and_then(|v| ron::to_string(&v).ok()),
     ];
 
-    info!("Setting {keybind} {values:?}");
-
     let mut statement = database.connection.prepare(query)?;
     statement.bind((":keybind", keybind))?;
     statement.bind_iter([

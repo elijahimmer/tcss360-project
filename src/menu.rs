@@ -602,64 +602,60 @@ fn controls_row(builder: &mut ChildSpawnerCommands<'_>, font: Handle<Font>, keyb
                     ));
                 });
 
-            controls_button(
-                builder,
-                font.clone(),
-                keys[0],
-                ControlsButtonAction::Prompt(control, 0),
-                Val::Px(150.0),
-            );
-            controls_button(
-                builder,
-                font.clone(),
-                keys[1],
-                ControlsButtonAction::Prompt(control, 1),
-                Val::Px(150.0),
-            );
-            //controls_button(
-            //    builder,
-            //    font.clone(),
-            //    "Reset Both".into(),
-            //    ControlsButtonAction::ResetBoth(control),
-            //    Val::Px(125.0),
-            //);
-        });
-}
+            for (i, key) in keys.into_iter().enumerate() {
+                builder
+                    .spawn((
+                        Button,
+                        Node {
+                            height: Val::Percent(100.0),
+                            width: Val::Px(150.0),
+                            margin: UiRect::px(2.0, 2.0, 0.0, 0.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            overflow: Overflow::clip(),
+                            ..default()
+                        },
+                        BackgroundColor(NORMAL_BUTTON),
+                        ControlsButtonAction::Prompt(control, i),
+                        AccessibilityNode(Accessible::new(Role::ListItem)),
+                        Pickable {
+                            should_block_lower: false,
+                            is_hoverable: true,
+                        },
+                    ))
+                    .observe(controls_menu_click)
+                    .with_children(|builder| input_to_screen(font.clone(), builder, &key));
+            }
 
-fn controls_button(
-    builder: &mut ChildSpawnerCommands<'_>,
-    font: Handle<Font>,
-    input: Option<Input>,
-    action: ControlsButtonAction,
-    width: Val,
-) {
-    let button_node = Node {
-        height: Val::Percent(100.0),
-        margin: UiRect::px(2.0, 2.0, 0.0, 0.0),
-        justify_content: JustifyContent::Center,
-        align_items: AlignItems::Center,
-        overflow: Overflow::clip(),
-        width,
-        ..default()
-    };
-
-    builder
-        .spawn((
-            Button,
-            button_node.clone(),
-            Interaction::None,
-            FocusPolicy::Block,
-            BackgroundColor(NORMAL_BUTTON),
-            action,
-            AccessibilityNode(Accessible::new(Role::ListItem)),
-            Pickable {
-                should_block_lower: false,
-                is_hoverable: true,
-            },
-        ))
-        .observe(controls_menu_click)
-        .with_children(|builder| {
-            input_to_screen(font.clone(), builder, &input);
+            builder
+                .spawn((
+                    Button,
+                    Node {
+                        height: Val::Percent(100.0),
+                        width: Val::Px(150.0),
+                        margin: UiRect::px(2.0, 2.0, 0.0, 0.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        overflow: Overflow::clip(),
+                        ..default()
+                    },
+                    BackgroundColor(NORMAL_BUTTON),
+                    ControlsButtonAction::ResetBoth(control),
+                    AccessibilityNode(Accessible::new(Role::ListItem)),
+                    Pickable {
+                        should_block_lower: false,
+                        is_hoverable: true,
+                    },
+                    children![(
+                        Text("Reset Both".into()),
+                        TextFont {
+                            font: font.clone(),
+                            font_size: 33.0,
+                            ..default()
+                        },
+                    )],
+                ))
+                .observe(controls_menu_click);
         });
 }
 
@@ -698,17 +694,25 @@ fn controls_menu_click(
 }
 
 fn controls_changed(
+    mut commands: Commands,
+    font: Res<CurrentFont>,
     controls: Res<Controls>,
-    button: Query<(&ControlsButtonAction, &Children)>,
-    mut text_query: Query<&mut Text>,
+    button: Query<(Entity, &ControlsButtonAction, &Children)>,
 ) {
-    for (action, children) in button.iter() {
+    for (entity, action, children) in button.iter() {
         use ControlsButtonAction as C;
         match action {
             C::Prompt(control, idx) => {
-                //let mut text = text_query.get_mut(children[0]).unwrap();
-
-                //**text = keybind_to_string(controls.get_control_part(*control, *idx));
+                let key = controls.get_control_part(*control, *idx);
+                for child in children {
+                    if let Ok(mut child) = commands.get_entity(*child) {
+                        child.despawn();
+                    }
+                }
+                commands
+                    .get_entity(entity)
+                    .unwrap()
+                    .with_children(|builder| input_to_screen(font.0.clone(), builder, &key));
             }
             C::PromptCancel | C::ResetBoth(..) | C::ResetAll => {}
         }
