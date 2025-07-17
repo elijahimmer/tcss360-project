@@ -7,6 +7,7 @@ mod menu;
 //mod save;
 mod sky;
 mod util;
+mod newgame;
 
 pub mod prelude {
     use bevy::prelude::States;
@@ -28,6 +29,7 @@ pub mod prelude {
     //pub use crate::save::{Save, SavePlugin};
     pub use crate::database::{Database, DatabaseError, DatabasePlugin, FromDatabase, ToDatabase};
     pub use crate::sky::SkyPlugin;
+    pub use crate::newgame::NewGamePlugin;
     pub use crate::util::*;
 }
 
@@ -90,6 +92,7 @@ fn main() {
         .add_plugins(CameraPlugin)
         //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
         //.add_systems(Startup, spawn_floors)
+        .add_plugins(NewGamePlugin)
         .run();
 }
 
