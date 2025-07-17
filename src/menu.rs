@@ -2,7 +2,6 @@
 
 use crate::controls::Control;
 use crate::controls::{Input, Keybind, input_to_screen};
-use crate::embed_asset;
 use crate::prelude::*;
 
 use bevy::{
@@ -21,7 +20,6 @@ use bevy::{
 
 use accesskit::{Node as Accessible, Role};
 
-const FONT_PATH: &str = "embedded://assets/fonts/Ithaca/Ithaca-LVB75.ttf";
 const BACKGROUND_COLOR: Color = Color::srgba_u8(0x26, 0x23, 0x3a, 0xaa);
 const BACKGROUND_COLOR_SOLID: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
 const TITLE_COLOR: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
@@ -35,10 +33,7 @@ pub struct MenuPlugin;
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        embed_asset!(app, "assets/fonts/Ithaca/Ithaca-LVB75.ttf");
-
         app.init_state::<MenuState>()
-            .add_systems(Startup, load_font)
             .add_systems(
                 Update,
                 (menu_action, button_highlight).run_if(in_state(GameState::Menu)),
@@ -87,9 +82,6 @@ impl Plugin for MenuPlugin {
             );
     }
 }
-
-#[derive(Resource)]
-struct CurrentFont(Handle<Font>);
 
 #[derive(Resource)]
 struct ControlPromptTarget(Control, usize);
@@ -141,10 +133,6 @@ enum MenuButtonAction {
 /// Tag component used to mark which setting is currently selected
 #[derive(Component)]
 struct SelectedOption;
-
-fn load_font(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.insert_resource(CurrentFont(assets.load(FONT_PATH)));
-}
 
 fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
     menu_state.set(MenuState::Main);
@@ -208,7 +196,7 @@ fn menu_action(
     }
 }
 
-fn main_enter(mut commands: Commands, font: Res<CurrentFont>) {
+fn main_enter(mut commands: Commands, style: Res<Style>) {
     // Common style for all buttons on the screen
     let button_node = Node {
         width: Val::Px(300.0),
@@ -218,11 +206,7 @@ fn main_enter(mut commands: Commands, font: Res<CurrentFont>) {
         align_items: AlignItems::Center,
         ..default()
     };
-    let button_text_font = TextFont {
-        font: font.0.clone(),
-        font_size: 33.0,
-        ..default()
-    };
+    let button_text_font = style.font(33.0);
 
     commands.spawn((
         Node {
@@ -243,11 +227,7 @@ fn main_enter(mut commands: Commands, font: Res<CurrentFont>) {
                 // Display the game name
                 (
                     Text::new("TCSS360 Project"),
-                    TextFont {
-                        font: font.0.clone(),
-                        font_size: 67.0,
-                        ..default()
-                    },
+                    style.font(67.0),
                     TextColor(TITLE_COLOR),
                     Node {
                         margin: UiRect::all(Val::Px(50.0)),
@@ -301,7 +281,7 @@ fn main_enter(mut commands: Commands, font: Res<CurrentFont>) {
     ));
 }
 
-fn settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
+fn settings_enter(mut commands: Commands, style: Res<Style>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -311,14 +291,7 @@ fn settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
         ..default()
     };
 
-    let button_text_style = (
-        TextFont {
-            font: font.0.clone(),
-            font_size: 33.0,
-            ..default()
-        },
-        TextColor(TEXT_COLOR),
-    );
+    let button_text_style = (style.font(33.0), TextColor(TEXT_COLOR));
 
     commands.spawn((
         Node {
@@ -357,7 +330,7 @@ fn settings_enter(mut commands: Commands, font: Res<CurrentFont>) {
     ));
 }
 
-fn display_enter(mut commands: Commands, font: Res<CurrentFont>) {
+fn display_enter(mut commands: Commands, style: Res<Style>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -367,14 +340,7 @@ fn display_enter(mut commands: Commands, font: Res<CurrentFont>) {
         ..default()
     };
 
-    let button_text_style = (
-        TextFont {
-            font: font.0.clone(),
-            font_size: 33.0,
-            ..default()
-        },
-        TextColor(TEXT_COLOR),
-    );
+    let button_text_style = (style.font(33.0), TextColor(TEXT_COLOR));
 
     commands.spawn((
         Node {
@@ -402,7 +368,7 @@ fn display_enter(mut commands: Commands, font: Res<CurrentFont>) {
     ));
 }
 
-fn sound_enter(mut commands: Commands, font: Res<CurrentFont> /*volume: Res<Volume>*/) {
+fn sound_enter(mut commands: Commands, style: Res<Style> /*volume: Res<Volume>*/) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -412,11 +378,7 @@ fn sound_enter(mut commands: Commands, font: Res<CurrentFont> /*volume: Res<Volu
         ..default()
     };
     let button_text_style = (
-        TextFont {
-            font: font.0.clone(),
-            font_size: 33.0,
-            ..default()
-        },
+        style.font(33.0),
         TextLayout::new_with_justify(JustifyText::Center),
         TextColor(TEXT_COLOR),
     );
@@ -482,7 +444,7 @@ enum ControlsButtonAction {
     ResetAll,
 }
 
-fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<Controls>) {
+fn controls_enter(mut commands: Commands, style: Res<Style>, controls: Res<Controls>) {
     let button_node = Node {
         width: Val::Px(200.0),
         height: Val::Px(65.0),
@@ -493,12 +455,8 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
     };
 
     let button_text_style = (
-        TextFont {
-            font: font.0.clone(),
-            font_size: 33.0,
-            ..default()
-        },
-        TextColor(TEXT_COLOR),
+        style.font(33.0),
+        TextColor(style.text_color),
         TextLayout::new_with_justify(JustifyText::Center),
     );
 
@@ -536,7 +494,7 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                     controls
                         .clone()
                         .into_iter()
-                        .for_each(|keybind| controls_row(builder, font.0.clone(), keybind))
+                        .for_each(|keybind| controls_row(builder, &style, keybind))
                 });
 
             builder
@@ -576,12 +534,7 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
                             "Note: The keys show are based on the physical key and may not reflect the keyboard input in a text box.",
                         ),
                         (
-                            TextFont {
-                                font: font.0.clone(),
-                                font_size: 18.0,
-                                ..default()
-                            },
-                            TextColor(TEXT_COLOR),
+                            style.font(18.0),
                             TextLayout::new_with_justify(JustifyText::Center),
                         ),
                         Pickable::IGNORE,
@@ -590,7 +543,7 @@ fn controls_enter(mut commands: Commands, font: Res<CurrentFont>, controls: Res<
         });
 }
 
-fn controls_row(builder: &mut ChildSpawnerCommands<'_>, font: Handle<Font>, keybind: Keybind) {
+fn controls_row(builder: &mut ChildSpawnerCommands<'_>, style: &Style, keybind: Keybind) {
     let Keybind(control, keys) = keybind;
     builder
         .spawn((Node::default(), Pickable::IGNORE))
@@ -611,11 +564,7 @@ fn controls_row(builder: &mut ChildSpawnerCommands<'_>, font: Handle<Font>, keyb
                     builder.spawn((
                         Text::new(control.to_string()),
                         TextColor(TITLE_COLOR),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 33.0,
-                            ..default()
-                        },
+                        style.font(33.0),
                         Pickable::IGNORE,
                     ));
                 });
@@ -642,7 +591,7 @@ fn controls_row(builder: &mut ChildSpawnerCommands<'_>, font: Handle<Font>, keyb
                         },
                     ))
                     .observe(controls_menu_click)
-                    .with_children(|builder| input_to_screen(font.clone(), builder, &key));
+                    .with_children(|builder| input_to_screen(style, builder, &key));
             }
 
             builder
@@ -666,11 +615,8 @@ fn controls_row(builder: &mut ChildSpawnerCommands<'_>, font: Handle<Font>, keyb
                     },
                     children![(
                         Text("Reset Both".into()),
-                        TextFont {
-                            font: font.clone(),
-                            font_size: 33.0,
-                            ..default()
-                        },
+                        style.font(33.0),
+                        TextColor(TEXT_COLOR)
                     )],
                 ))
                 .observe(controls_menu_click);
@@ -713,7 +659,7 @@ fn controls_menu_click(
 
 fn controls_changed(
     mut commands: Commands,
-    font: Res<CurrentFont>,
+    style: Res<Style>,
     controls: Res<Controls>,
     button: Query<(Entity, &ControlsButtonAction, &Children)>,
 ) {
@@ -731,7 +677,7 @@ fn controls_changed(
                     .get_entity(entity)
                     .expect("It was just clicked, it should be alive?")
                     .remove_children(children)
-                    .with_children(|builder| input_to_screen(font.0.clone(), builder, &key));
+                    .with_children(|builder| input_to_screen(&style, builder, &key));
             }
             C::PromptCancel | C::ResetBoth(..) | C::ResetAll => {}
         }
@@ -742,13 +688,9 @@ fn remove_control_prompt_target(mut commands: Commands) {
     commands.remove_resource::<ControlPromptTarget>();
 }
 
-fn control_prompt_enter(mut commands: Commands, font: Res<CurrentFont>) {
+fn control_prompt_enter(mut commands: Commands, style: Res<Style>) {
     let button_text_style = (
-        TextFont {
-            font: font.0.clone(),
-            font_size: 33.0,
-            ..default()
-        },
+        style.font(33.0),
         TextColor(TEXT_COLOR),
         TextLayout::new_with_justify(JustifyText::Center),
     );
@@ -780,11 +722,7 @@ fn control_prompt_enter(mut commands: Commands, font: Res<CurrentFont>) {
             children![
                 (
                     Text::new("Press any key to bind,"),
-                    TextFont {
-                        font: font.0.clone(),
-                        font_size: 67.0,
-                        ..default()
-                    },
+                    style.font(33.0),
                     TextColor(TEXT_COLOR),
                     Node {
                         margin: UiRect::all(Val::Px(50.0)),
@@ -793,11 +731,7 @@ fn control_prompt_enter(mut commands: Commands, font: Res<CurrentFont>) {
                 ),
                 (
                     Text::new("or click 'Cancel'"),
-                    TextFont {
-                        font: font.0.clone(),
-                        font_size: 67.0,
-                        ..default()
-                    },
+                    style.font(33.0),
                     TextColor(TEXT_COLOR),
                     Node {
                         margin: UiRect::all(Val::Px(50.0)),

@@ -1,15 +1,20 @@
 //! TODO: Display keybinds as icons/characters and inputs and lists of them.
 
+use crate::embed_asset;
 use crate::prelude::*;
 use bevy::ecs::relationship::{RelatedSpawnerCommands, Relationship};
 use bevy::{input::InputSystem, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::iter::IntoIterator;
 
+const BUTTON_SPRITE_IMAGE_PATH: &str = "embedded://assets/sprites/buttons.png";
+
 pub struct ControlsPlugin;
 
 impl Plugin for ControlsPlugin {
     fn build(&self, app: &mut App) {
+        embed_asset!(app, "assets/sprites/buttons.png");
+
         app.add_systems(Startup, setup_controls)
             .init_resource::<InputState>()
             .init_resource::<ButtonInput<Input>>()
@@ -102,20 +107,30 @@ fn update_control_state(
 #[reflect(Debug, Hash, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Keybind(pub Control, pub InputList);
 
+impl Keybind {
+    pub fn to_screen<R: Relationship>(
+        &self,
+        _style: &Style,
+        _builder: &mut RelatedSpawnerCommands<'_, R>,
+    ) {
+        todo!("display multiple");
+    }
+}
+
 const TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
 
 pub fn input_to_screen<R: Relationship>(
-    font: Handle<Font>,
+    style: &Style,
     builder: &mut RelatedSpawnerCommands<'_, R>,
     input: &Option<Input>,
 ) {
     match input {
-        Some(input) => input.to_screen(font, builder),
+        Some(input) => input.to_screen(style, builder),
         None => {
             builder.spawn((
-                Text::new("None"),
+                Text::new("Not Bound"),
                 TextFont {
-                    font,
+                    font: style.font.clone(),
                     font_size: 33.0,
                     ..default()
                 },
@@ -124,25 +139,6 @@ pub fn input_to_screen<R: Relationship>(
                 Pickable::IGNORE,
             ));
         }
-    }
-}
-impl Keybind {
-    pub fn to_screen<R: Relationship>(
-        &self,
-        font: Handle<Font>,
-        builder: &mut RelatedSpawnerCommands<'_, R>,
-    ) {
-        builder.spawn((
-            Text::new(ron::to_string(self).unwrap()),
-            TextFont {
-                font,
-                font_size: 33.0,
-                ..default()
-            },
-            TextColor(TEXT_COLOR),
-            Label,
-            Pickable::IGNORE,
-        ));
     }
 }
 
@@ -164,20 +160,31 @@ pub enum Input {
 impl Input {
     pub fn to_screen<R: Relationship>(
         &self,
-        font: Handle<Font>,
+        style: &Style,
         builder: &mut RelatedSpawnerCommands<'_, R>,
     ) {
-        builder.spawn((
-            Text::new(ron::to_string(self).unwrap()),
-            TextFont {
-                font,
-                font_size: 33.0,
-                ..default()
-            },
-            TextColor(TEXT_COLOR),
-            Label,
-            Pickable::IGNORE,
-        ));
+        match self {
+            //Self::Keyboard(KeyCode::KeyW) => {
+            //    let icon = style.icons;
+            //    builder.spawn((
+            //        ImageNode::new(icon),
+            //        Node {
+            //            // This will set the logo to be 200px wide, and auto adjust its height
+            //            width: Val::Px(200.0),
+            //            ..default()
+            //        },
+            //    ));
+            //}
+            _ => {
+                builder.spawn((
+                    Text::new(ron::to_string(self).unwrap()),
+                    style.font(33.0),
+                    TextColor(TEXT_COLOR),
+                    Label,
+                    Pickable::IGNORE,
+                ));
+            }
+        }
     }
 }
 

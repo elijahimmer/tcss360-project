@@ -1,12 +1,11 @@
 mod camera;
-mod colors;
 mod consts;
 mod controls;
 mod database;
 mod menu;
-//mod save;
 mod newgame;
 mod sky;
+mod style;
 mod util;
 //mod tiles;
 
@@ -23,18 +22,19 @@ pub mod prelude {
 
     pub use crate::consts::*;
 
-    pub use crate::camera::CameraPlugin;
-    pub use crate::colors::{Colors, ColorsPlugin};
-    pub use crate::controls::{Control, Controls, ControlsPlugin, InputState};
-    pub use crate::colors::{Colors, ColorsPlugin};
-    pub use crate::menu::MenuPlugin;
-    //pub use crate::save::{Save, SavePlugin};
-    pub use crate::database::{Database, DatabaseError, DatabasePlugin, FromDatabase, ToDatabase};
-    pub use crate::newgame::NewGamePlugin;
-    pub use crate::sky::SkyPlugin;
+    pub use crate::controls::{Control, Controls, InputState};
+    pub use crate::database::{Database, DatabaseError, FromDatabase, ToDatabase};
+    pub use crate::style::Style;
     pub use crate::util::*;
 }
 
+use crate::camera::CameraPlugin;
+use crate::controls::ControlsPlugin;
+use crate::database::DatabasePlugin;
+use crate::menu::MenuPlugin;
+use crate::newgame::NewGamePlugin;
+use crate::sky::SkyPlugin;
+use crate::style::StylePlugin;
 use prelude::*;
 
 #[cfg(feature = "debug")]
@@ -87,7 +87,8 @@ fn main() {
     #[cfg(feature = "sqlite")]
     app.add_plugins(DatabasePlugin);
 
-    app.add_plugins(ControlsPlugin)
+    app.add_plugins(StylePlugin)
+        .add_plugins(ControlsPlugin)
         .add_plugins(MenuPlugin)
         .add_plugins(SkyPlugin)
         //.add_plugins(SavePlugin)

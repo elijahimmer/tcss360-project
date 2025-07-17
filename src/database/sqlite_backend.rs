@@ -17,7 +17,7 @@ pub type DatabaseError = sqlite::Error;
 
 type Version = i64;
 
-const DB_VERSION: Version = 3;
+const DB_VERSION: Version = 4;
 
 const ADD_SCHEMA: &str = formatcp!(
     r#"
@@ -40,9 +40,9 @@ CREATE TABLE Keybinds(
     key2    TEXT
 ) STRICT;
 
-CREATE TABLE Colors(
-    name  TEXT PRIMARY KEY,
-    color INTEGER
+CREATE TABLE Style(
+    key   TEXT PRIMARY KEY,
+    value ANY
 ) STRICT;
 
 COMMIT;
@@ -138,11 +138,12 @@ impl Database {
         Ok(db)
     }
 
-    pub fn get_kv_direct<T: sqlite::ReadableWithIndex>(
+    pub fn get_kv_table_direct<T: sqlite::ReadableWithIndex>(
         &self,
+        table: &str,
         key: &str,
     ) -> Result<Option<T>, DatabaseError> {
-        let query = "SELECT value FROM KeyValue WHERE key = :key";
+        let query = format!("SELECT value FROM {table} WHERE key = :key");
         let mut statement = self.connection.prepare(query)?;
 
         statement.bind((":key", key))?;
@@ -150,34 +151,100 @@ impl Database {
         if let sqlite::State::Done = statement.next()? {
             return Ok(None);
         }
-        assert_eq!(
-            statement.column_count(),
-            2,
-            "There should only be 2 columns if it is a single table like this."
-        );
 
         // read the value column index.
-        let value = statement.read::<Option<T>, usize>(2)?;
+        let value = statement.read::<Option<T>, usize>(0)?;
 
         assert!(matches!(statement.next()?, sqlite::State::Done));
 
         Ok(value)
     }
 
-    pub fn get_kv<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, GetKvError> {
+    pub fn get_kv_table<T: DeserializeOwned>(
+        &self,
+        table: &str,
+        key: &str,
+    ) -> Result<Option<T>, GetKvError> {
         Ok(self
-            .get_kv_direct::<String>(key)?
+            .get_kv_table_direct::<String>(table, key)?
             .as_deref()
             .map(|str| ron::from_str(str))
             .transpose()?)
     }
 
-    pub fn set_kv_direct<T: sqlite::BindableWithIndex>(
+    pub fn get_kv_direct<T: sqlite::ReadableWithIndex>(
         &self,
+        key: &str,
+    ) -> Result<Option<T>, DatabaseError> {
+        self.get_kv_table_direct("KeyValue", key)
+    }
+
+    pub fn get_kv<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, GetKvError> {
+        self.get_kv_table("KeyValue", key)
+    }
+
+    pub fn get_kv_table_direct_or_default<
+        T: sqlite::ReadableWithIndex,
+        U: sqlite::BindableWithIndex + Into<T> + Clone,
+    >(
+        &self,
+        table: &str,
+        key: &str,
+        default: U,
+    ) -> T {
+        match self.get_kv_table_direct(table, key) {
+            Err(err) => {
+                warn!("Failed to read key '{key}' from table '{table}' with error: {err}");
+                default.into()
+            }
+            Ok(None) => {
+                warn!(
+                    "No such key '{key}' in table '{table}' (this is expected first launch or after an update)."
+                );
+                if let Err(err) = self.set_kv_table_direct(table, key, default.clone()) {
+                    warn!(
+                        "Failed to set key '{key}' in table '{table}' in database with error: {err}"
+                    )
+                }
+                default.into()
+            }
+            Ok(Some(t)) => t,
+        }
+    }
+
+    pub fn get_kv_table_or_default<T: Serialize + DeserializeOwned + Clone>(
+        &self,
+        table: &str,
+        key: &str,
+        default: T,
+    ) -> T {
+        match self.get_kv_table(table, key) {
+            Err(err) => {
+                warn!("Failed to read key '{key}' from table '{table}' with error: {err}");
+                default.into()
+            }
+            Ok(None) => {
+                warn!(
+                    "No such key '{key}' in table '{table}' (this is expected first launch or after an update)."
+                );
+                if let Err(err) = self.set_kv_table(table, key, default.clone()) {
+                    warn!(
+                        "Failed to set key '{key}' in table '{table}' in database with error: {err}"
+                    )
+                }
+                default.into()
+            }
+            Ok(Some(t)) => t,
+        }
+    }
+
+    pub fn set_kv_table_direct<T: sqlite::BindableWithIndex>(
+        &self,
+        table: &str,
         key: &str,
         value: T,
     ) -> Result<(), DatabaseError> {
-        let query = "INSERT INTO KeyValue VALUES (:key, :value)";
+        let query = format!("INSERT INTO {table} VALUES (:key, :value)");
         let mut statement = self.connection.prepare(query)?;
         statement.bind((":key", key))?;
         statement.bind((":value", value))?;
@@ -187,8 +254,25 @@ impl Database {
         Ok(())
     }
 
-    pub fn set_kv<T: Serialize>(&self, key: &str) -> Result<(), SetKvError> {
-        Ok(self.set_kv_direct(key, ron::to_string(key)?.as_str())?)
+    pub fn set_kv_table<T: Serialize>(
+        &self,
+        table: &str,
+        key: &str,
+        value: T,
+    ) -> Result<(), SetKvError> {
+        Ok(self.set_kv_table_direct(table, key, ron::to_string(&value)?.as_str())?)
+    }
+
+    pub fn set_kv_direct<T: sqlite::BindableWithIndex>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<(), DatabaseError> {
+        self.set_kv_table_direct("KeyValue", key, value)
+    }
+
+    pub fn set_kv<T: Serialize>(&self, key: &str, value: T) -> Result<(), SetKvError> {
+        self.set_kv_table("KeyValue", key, value)
     }
 }
 
@@ -285,6 +369,7 @@ pub enum ValidateSchemaError {
     DatabaseError(#[from] DatabaseError),
 }
 
+const _: () = assert!(DB_VERSION == 4, "UPDATE VALIDATE SCRIPT");
 fn validate_schema(db: &Database) -> Result<(), ValidateSchemaError> {
     let mut statement = db
         .connection
@@ -299,8 +384,7 @@ fn validate_schema(db: &Database) -> Result<(), ValidateSchemaError> {
         "Keybinds",
         &[("keybind", "TEXT"), ("key1", "TEXT"), ("key2", "TEXT")],
     )?;
-
-    //validate_table(db, "SaveGame", &[("created", "DATETIME"), ("rand", "TEXT")])?;
+    validate_table(db, "Style", &[("key", "TEXT"), ("value", "ANY")])?;
 
     Ok(())
 }
@@ -358,11 +442,17 @@ fn backup_database() -> Result<(), BackupError> {
     db_path.push("database.sqlite");
 
     let mut backup_path = get_default_db_directory();
-    backup_path.push(format!("{}_database.sqlite.backup", chrono::offset::Utc::now().format("%+")));
+    backup_path.push(format!(
+        "{}_database.sqlite.backup",
+        chrono::offset::Utc::now().format("%+")
+    ));
 
     // While theoretically now bounded, this should be bounded in practice.
     while backup_path.exists() {
-        backup_path.set_file_name(format!("{}-database.sqlite.backup", chrono::offset::Utc::now().format("%+")));
+        backup_path.set_file_name(format!(
+            "{}-database.sqlite.backup",
+            chrono::offset::Utc::now().format("%+")
+        ));
     }
 
     std::fs::copy(db_path, backup_path)?;
@@ -380,20 +470,18 @@ pub enum MigrationError {
 
 const MIN_VERSION_MIGRATEABLE: Version = 3;
 /// Make sure the migrations are set up properly
-const _: () = assert!(DB_VERSION == 3, "UPDATE THE MIGRATION SCRIPT");
+const _: () = assert!(DB_VERSION == 4, "UPDATE THE MIGRATION SCRIPT");
 
 /// MAINTENANCE: UPDATE EVERY DATABASE UPDGRADE
 fn migrate_database(db: &Database, from: Version) -> Result<(), MigrationError> {
     assert!((MIN_VERSION_MIGRATEABLE..DB_VERSION).contains(&from));
 
     let mut from = from;
-    _ = &mut from;
-    _ = db;
 
-    //if (from == 1) {
-    //    migrate_from_1_to_2(db)?;
-    //    from = 2;
-    //}
+    if from == 3 {
+        migrate_from_3_to_4(db)?;
+        from = 4;
+    }
 
     assert_eq!(
         from, DB_VERSION,
@@ -402,18 +490,23 @@ fn migrate_database(db: &Database, from: Version) -> Result<(), MigrationError> 
     Ok(())
 }
 
-//fn migrate_from_1_to_2(db: &Database) -> Result<(), DatabaseError> {
-//    let query = r#"
-//        BEGIN TRANSACTION;
-//        CREATE TABLE Colors(
-//            name  VARCHAR(16) PRIMARY KEY,
-//            color MEDIUMINTEGER
-//        );
-//        UPDATE Version SET version = 2;
-//        COMMIT;
-//    "#;
-//
-//    db.connection.execute(query)?;
-//
-//    Ok(())
-//}
+fn migrate_from_3_to_4(db: &Database) -> Result<(), DatabaseError> {
+    let query = r#"
+        BEGIN TRANSACTION;
+
+        UPDATE Version SET version = 4;
+
+        DROP TABLE Colors;
+
+        CREATE TABLE Style(
+            key   TEXT PRIMARY KEY,
+            value ANY
+        ) STRICT;
+
+        COMMIT;
+    "#;
+
+    db.connection.execute(query)?;
+
+    Ok(())
+}
