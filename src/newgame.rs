@@ -1,19 +1,23 @@
 use crate::prelude::*;
 use bevy::prelude::*;
+use bevy_ecs_tilemap::helpers::hex_grid::axial::AxialPos;
 use bevy_ecs_tilemap::prelude::*;
 use rand::{Rng, SeedableRng};
-use bevy_ecs_tilemap::helpers::hex_grid::axial::AxialPos;
+use crate::tiles::spawn_tile_labels;
 
 pub struct NewGamePlugin;
 
-const ROOM_SIZE: TilemapSize = TilemapSize { x: 10, y: 10 };
+const ROOM_SIZE: TilemapSize = TilemapSize { x: 21, y: 21 };
 const ROOM_TILE_LAYER: f32 = 0.0;
 const RADIUS: u32 = 10;
 
 impl Plugin for NewGamePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(TileRand(RandomSource::from_os_rng()))
-            .add_systems(OnEnter(GameState::Game), spawn_room);
+            .add_systems(
+                OnEnter(GameState::Game),
+                (spawn_room, spawn_tile_labels::<RoomTileMap, RoomTile>).chain(),
+            );
     }
 }
 
@@ -34,9 +38,7 @@ fn spawn_room(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: R
     let tilemap_entity = commands.spawn_empty().id();
     let mut tile_storage = TileStorage::empty(ROOM_SIZE);
 
-    let origin = TilePos { x: 0, y: 0};
-
-
+    let origin = TilePos { x: 10, y: 10 };
 
     let tile_positions = generate_hexagon(
         AxialPos::from_tile_pos_given_coord_system(&origin, HEX_COORD_SYSTEM),
@@ -78,3 +80,4 @@ fn spawn_room(mut commands: Commands, asset_server: Res<AssetServer>, mut rng: R
         },
     ));
 }
+

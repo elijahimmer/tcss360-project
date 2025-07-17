@@ -8,6 +8,9 @@ mod menu;
 mod newgame;
 mod sky;
 mod util;
+mod tiles; 
+
+
 
 pub mod prelude {
     use bevy::prelude::States;
