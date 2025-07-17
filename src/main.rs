@@ -1,7 +1,7 @@
 mod camera;
+mod colors;
 mod consts;
 mod controls;
-#[cfg(feature = "sqlite")]
 mod database;
 mod menu;
 //mod save;
@@ -22,11 +22,11 @@ pub mod prelude {
     pub use crate::consts::*;
 
     pub use crate::camera::CameraPlugin;
+    pub use crate::colors::{Colors, ColorsPlugin};
     pub use crate::controls::{Control, Controls, ControlsPlugin, InputState};
     pub use crate::menu::MenuPlugin;
     //pub use crate::save::{Save, SavePlugin};
-    #[cfg(feature = "sqlite")]
-    pub use crate::database::{Database, DatabasePlugin, FromDatabase, ToDatabase};
+    pub use crate::database::{Database, DatabaseError, DatabasePlugin, FromDatabase, ToDatabase};
     pub use crate::sky::SkyPlugin;
     pub use crate::util::*;
 }

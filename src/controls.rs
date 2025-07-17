@@ -1,6 +1,5 @@
 //! TODO: Display keybinds as icons/characters and inputs and lists of them.
 
-#[cfg(feature = "sqlite")]
 use crate::prelude::*;
 use bevy::ecs::relationship::{RelatedSpawnerCommands, Relationship};
 use bevy::{input::InputSystem, prelude::*};
@@ -284,9 +283,10 @@ impl Default for Controls {
     }
 }
 
-#[cfg(feature = "sqlite")]
 // TODO: Do this in a single transaction maybe? (don't know if it matters)
+// TODO: add database backend support so we don't need  stub version here
 impl FromDatabase for Controls {
+    #[cfg(feature = "sqlite")]
     fn from_database(database: &Database) -> Self {
         Self {
             move_up: query_keybind_or_set(database, "move_up", DEFAULT_UP_CONTROLS),
@@ -299,13 +299,18 @@ impl FromDatabase for Controls {
             select: query_keybind_or_set(database, "select", DEFAULT_SELECT_CONTROLS),
         }
     }
+
+    #[cfg(not(feature = "sqlite"))]
+    fn from_database(_database: &Database) -> Self {
+        default()
+    }
 }
 
-#[cfg(feature = "sqlite")]
 // TODO: Do this in a single transaction maybe? (don't know if it matters)
+// TODO: add database backend support so we don't need  stub version here
 impl ToDatabase for Controls {
-    type Error = sqlite::Error;
-    fn to_database(&self, database: &Database) -> Result<(), Self::Error> {
+    #[cfg(feature = "sqlite")]
+    fn to_database(&self, database: &Database) -> Result<(), DatabaseError> {
         set_keybind(database, "move_up", self.move_up)?;
         set_keybind(database, "move_down", self.move_down)?;
         set_keybind(database, "move_left", self.move_left)?;
@@ -315,6 +320,11 @@ impl ToDatabase for Controls {
         set_keybind(database, "pause", self.pause)?;
         set_keybind(database, "select", self.select)?;
 
+        Ok(())
+    }
+
+    #[cfg(not(feature = "sqlite"))]
+    fn to_database(&self, _database: &Database) -> Result<(), DatabaseError> {
         Ok(())
     }
 }

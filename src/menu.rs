@@ -124,6 +124,9 @@ struct OnControls;
 #[derive(Component)]
 struct OnControlPrompt;
 
+/// Specifies the action that should be taken the button it is on is clicked.
+///
+/// The node will need to be observed by `menu_button_action` for this to take effect.
 #[derive(Component)]
 enum MenuButtonAction {
     Play,
@@ -135,6 +138,10 @@ enum MenuButtonAction {
     Quit,
 }
 
+/// Tag component used to mark which setting is currently selected
+#[derive(Component)]
+struct SelectedOption;
+
 fn load_font(mut commands: Commands, assets: Res<AssetServer>) {
     commands.insert_resource(CurrentFont(assets.load(FONT_PATH)));
 }
@@ -142,10 +149,6 @@ fn load_font(mut commands: Commands, assets: Res<AssetServer>) {
 fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
     menu_state.set(MenuState::Main);
 }
-
-// Tag component used to mark which setting is currently selected
-#[derive(Component)]
-struct SelectedOption;
 
 fn escape_out(mut commands: Commands, menu_state: Res<State<MenuState>>, key: Res<InputState>) {
     if key.just_pressed(Control::Pause) {

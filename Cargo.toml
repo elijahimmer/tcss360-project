@@ -17,6 +17,7 @@ sqlite = { version = "0.37", optional = true }
 thiserror = "2"
 wyrand = { version = "0.3", features = ["serde1"] }
 blake3 = { version = "1.8", features = [ "pure" ] }
+chrono = { version = "0.4.41", features = ["serde"], optional = true}
 
 [dependencies.bevy]
 version = "0.16"
@@ -81,7 +82,7 @@ inherits = "dev"
 
 [features]
 default = ["sqlite"]
-sqlite = ["dep:sqlite"]
+sqlite = ["dep:sqlite", "dep:chrono"]
 debug = [
   "bevy/bevy_dev_tools",
   "bevy/debug_glam_assert",

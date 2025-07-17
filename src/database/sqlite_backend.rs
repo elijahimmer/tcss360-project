@@ -1,68 +1,53 @@
+//! The SQLite Database backend!
+//!
+//! TODO: Alert the user in the game when there is a database issue.
+//!       Be it at startup or at runtime.
+use super::*;
+
 use bevy::prelude::*;
+use sqlite::ConnectionThreadSafe;
+
 use std::cmp::Ordering;
-use std::path::Path;
 
 use const_format::formatcp;
-use directories::ProjectDirs;
 use serde::{Serialize, de::DeserializeOwned};
-use sqlite::ConnectionThreadSafe;
 use thiserror::Error;
+
+pub type DatabaseError = sqlite::Error;
 
 type Version = i64;
 
-const DB_VERSION: Version = 1;
-const MIN_VERSION_MIGRATEABLE: Version = 1;
+const DB_VERSION: Version = 3;
 
 const ADD_SCHEMA: &str = formatcp!(
     r#"
 BEGIN TRANSACTION;
+
 CREATE TABLE Version(
   version INTEGER PRIMARY KEY
-) WITHOUT ROWID;
+) STRICT;
 
 INSERT INTO Version VALUES ({DB_VERSION});
 
 CREATE TABLE KeyValue(
-    key   VARCHAR(32) PRIMARY KEY,
-    value TEXT
+    key   TEXT PRIMARY KEY,
+    value ANY
 );
 
 CREATE TABLE Keybinds(
-    keybind VARCHAR(16) PRIMARY KEY,
-    key1    MEDIUMINTEGER UNIQUE,
-    key2    MEDIUMINTEGER UNIQUE
-);
+    keybind TEXT PRIMARY KEY,
+    key1    TEXT,
+    key2    TEXT
+) STRICT;
 
-CREATE TABLE SaveGame(
-    created DATETIME PRIMARY KEY,
-    rand TEXT
-);
+CREATE TABLE Colors(
+    name  TEXT PRIMARY KEY,
+    color INTEGER
+) STRICT;
 
 COMMIT;
 "#
 );
-
-pub struct DatabasePlugin;
-
-impl Plugin for DatabasePlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(
-            Database::open()
-                .inspect_err(|e| error!("Failed to open database with: {e}"))
-                .unwrap(),
-        );
-    }
-}
-
-pub trait FromDatabase {
-    /// Cannot fail, must resort to defaults.
-    fn from_database(database: &Database) -> Self;
-}
-
-pub trait ToDatabase {
-    type Error;
-    fn to_database(&self, database: &Database) -> Result<(), Self::Error>;
-}
 
 #[derive(Resource)]
 pub struct Database {
@@ -71,9 +56,11 @@ pub struct Database {
 
 impl Database {
     pub fn open() -> Result<Self, OpenError> {
-        let path = get_default_db_path();
+        let mut path = get_default_db_directory();
+        path.push("database.sqlite");
+
         let exists = path.exists();
-        let mut db = {
+        let db = {
             let connection = match sqlite::Connection::open_thread_safe(&path) {
                 Ok(conn) => conn,
                 Err(err) => {
@@ -91,22 +78,34 @@ impl Database {
 
         if exists {
             info!("Using existing database at '{}'!", path.display());
-            match check_version(&mut db.connection)? {
+            match check_version(&db)? {
                 VersionCompatability::Future(v) => {
                     error!(
-                        "Database is from a future version {v} compared to current version {DB_VERSION}, and is thus incompatable!"
+                        "Database is from a future version {v} compared to current version {DB_VERSION}! You may be running an outdated version of the game"
                     );
                     return Err(OpenError::IncompatableVersion(v));
                 }
                 VersionCompatability::Same => {
-                    info!("Database version is up to date! proceeding!");
+                    info!("Database version is up to date!");
                 }
                 VersionCompatability::Migratable(v) => {
                     warn!(
-                        "Database version is out dated, but migrateable migrating from {v} to {DB_VERSION} . Backing up database then attempting migration..."
+                        "Database version is out dated, but migrateable. Backing up database then attempting migration..."
                     );
-                    // This is out of the scope of the project, but good for the future.
-                    todo!("Setup database migrations as needed/wanted!");
+
+                    if let Err(err) = backup_database() {
+                        error!("Failed to back up database before migration! {err}");
+                        return Err(err.into());
+                    }
+
+                    info!("Backup successful! Migrating from database version {v} to {DB_VERSION}");
+
+                    if let Err(err) = migrate_database(&db, v) {
+                        error!("Failed to migrate database with error {err}");
+                        return Err(err.into());
+                    }
+
+                    info!("Database migration successful!");
                 }
                 VersionCompatability::Incompatable(v) => {
                     error!(
@@ -124,7 +123,7 @@ impl Database {
         }
 
         info!("Running database validation checks.");
-        match validate_schema(&db.connection) {
+        match validate_schema(&db) {
             Ok(()) => {}
             Err(err) => {
                 error!("Failed to validate SQLite Table with error {err}.");
@@ -142,7 +141,7 @@ impl Database {
     pub fn get_kv_direct<T: sqlite::ReadableWithIndex>(
         &self,
         key: &str,
-    ) -> Result<Option<T>, sqlite::Error> {
+    ) -> Result<Option<T>, DatabaseError> {
         let query = "SELECT value FROM KeyValue WHERE key = :key";
         let mut statement = self.connection.prepare(query)?;
 
@@ -177,7 +176,7 @@ impl Database {
         &self,
         key: &str,
         value: T,
-    ) -> Result<(), sqlite::Error> {
+    ) -> Result<(), DatabaseError> {
         let query = "INSERT INTO KeyValue VALUES (:key, :value)";
         let mut statement = self.connection.prepare(query)?;
         statement.bind((":key", key))?;
@@ -195,6 +194,10 @@ impl Database {
 
 #[derive(Error, Debug)]
 pub enum OpenError {
+    #[error("Failed to backup database with {0}!")]
+    BackupFailed(#[from] BackupError),
+    #[error("Migration failed with {0}!")]
+    MigrationFailed(#[from] MigrationError),
     #[error("Version Incompatable found version `{0}`!")]
     IncompatableVersion(Version),
     #[error("Version check failed with `{0}`")]
@@ -202,7 +205,23 @@ pub enum OpenError {
     #[error("Schema valdation failed with `{0}`")]
     ValidationFailed(#[from] ValidateSchemaError),
     #[error("SQLite error occured: `{0}`")]
-    SqliteError(#[from] sqlite::Error),
+    DatabaseError(#[from] DatabaseError),
+}
+
+#[derive(Error, Debug)]
+pub enum GetKvError {
+    #[error("Failed to deserialize value with error `{0}`")]
+    DeserializerError(#[from] ron::error::SpannedError),
+    #[error("SQLite error occured: `{0}`")]
+    DatabaseError(#[from] DatabaseError),
+}
+
+#[derive(Error, Debug)]
+pub enum SetKvError {
+    #[error("Failed to serialize value with error `{0}`")]
+    SerializeError(#[from] ron::Error),
+    #[error("SQLite error occured: `{0}`")]
+    DatabaseError(#[from] DatabaseError),
 }
 
 #[derive(Error, Debug)]
@@ -212,7 +231,7 @@ pub enum CheckVersionError {
     #[error("Version table incompatable! Assuming data is invalid.")]
     IncompatableVersionTable,
     #[error("SQLite error occured: `{0}`")]
-    SqliteError(#[from] sqlite::Error),
+    DatabaseError(#[from] DatabaseError),
 }
 
 pub enum VersionCompatability {
@@ -222,26 +241,8 @@ pub enum VersionCompatability {
     Incompatable(Version),
 }
 
-#[derive(Error, Debug)]
-pub enum GetKvError {
-    #[error("Failed to deserialize value with error `{0}`")]
-    DeserializerError(#[from] ron::error::SpannedError),
-    #[error("SQLite error occured: `{0}`")]
-    SqliteError(#[from] sqlite::Error),
-}
-
-#[derive(Error, Debug)]
-pub enum SetKvError {
-    #[error("Failed to serialize value with error `{0}`")]
-    SerializeError(#[from] ron::Error),
-    #[error("SQLite error occured: `{0}`")]
-    SqliteError(#[from] sqlite::Error),
-}
-
-fn check_version(
-    connection: &ConnectionThreadSafe,
-) -> Result<VersionCompatability, CheckVersionError> {
-    let mut statement = connection.prepare("SELECT version FROM Version;")?;
+fn check_version(db: &Database) -> Result<VersionCompatability, CheckVersionError> {
+    let mut statement = db.connection.prepare("SELECT version FROM Version;")?;
 
     if !matches!(statement.next()?, sqlite::State::Row) {
         error!("No version found in database!");
@@ -276,42 +277,41 @@ fn check_version(
     })
 }
 
-fn validate_schema(connection: &ConnectionThreadSafe) -> Result<(), ValidateSchemaError> {
-    let mut statement = connection.prepare("PRAGMA integrity_check; PRAGMA optimize;")?;
+#[derive(Error, Debug)]
+pub enum ValidateSchemaError {
+    #[error("SQLite table '{0}' failed validation!")]
+    Invalid(Box<str>),
+    #[error("SQLite error occured: `{0}`")]
+    DatabaseError(#[from] DatabaseError),
+}
+
+fn validate_schema(db: &Database) -> Result<(), ValidateSchemaError> {
+    let mut statement = db
+        .connection
+        .prepare("PRAGMA integrity_check; PRAGMA optimize;")?;
     assert!(matches!(statement.next()?, sqlite::State::Row));
     assert!(matches!(statement.next()?, sqlite::State::Done));
 
-    validate_table(connection, "Version", &[("version", "INTEGER")])?;
+    validate_table(db, "Version", &[("version", "INTEGER")])?;
+    validate_table(db, "KeyValue", &[("key", "TEXT"), ("value", "ANY")])?;
     validate_table(
-        connection,
-        "KeyValue",
-        &[("key", "VARCHAR(32)"), ("value", "TEXT")],
-    )?;
-    validate_table(
-        connection,
+        db,
         "Keybinds",
-        &[
-            ("keybind", "VARCHAR(16)"),
-            ("key1", "MEDIUMINTEGER"),
-            ("key2", "MEDIUMINTEGER"),
-        ],
+        &[("keybind", "TEXT"), ("key1", "TEXT"), ("key2", "TEXT")],
     )?;
-    validate_table(
-        connection,
-        "SaveGame",
-        &[("created", "DATETIME"), ("rand", "TEXT")],
-    )?;
+
+    //validate_table(db, "SaveGame", &[("created", "DATETIME"), ("rand", "TEXT")])?;
 
     Ok(())
 }
 
 fn validate_table(
-    connection: &ConnectionThreadSafe,
+    db: &Database,
     table_name: &str,
     contents: &[(&str, &str)],
 ) -> Result<(), ValidateSchemaError> {
     let query = format!("PRAGMA table_info({table_name});");
-    let mut statement = connection.prepare(query)?;
+    let mut statement = db.connection.prepare(query)?;
 
     for (expected_name, expected_ctype) in contents.iter() {
         if let sqlite::State::Done = statement.next()? {
@@ -345,28 +345,81 @@ fn validate_table(
 }
 
 #[derive(Error, Debug)]
-pub enum ValidateSchemaError {
-    #[error("SQLite table '{0}' failed validation!")]
-    Invalid(Box<str>),
+pub enum BackupError {
+    #[error("Failed to find migration script!")]
+    NoMigrationScript,
+    #[error("Failed to save backup with error: {0}")]
+    FileError(#[from] std::io::Error),
+}
+
+///
+fn backup_database() -> Result<(), BackupError> {
+    let mut db_path = get_default_db_directory();
+    db_path.push("database.sqlite");
+
+    let mut backup_path = get_default_db_directory();
+    backup_path.push(format!(
+        "{}_database.sqlite.backup",
+        chrono::offset::Utc::now().format("%+")
+    ));
+
+    // While theoretically now bounded, this should be bounded in practice.
+    while backup_path.exists() {
+        backup_path.set_file_name(format!(
+            "{}-database.sqlite.backup",
+            chrono::offset::Utc::now().format("%+")
+        ));
+    }
+
+    std::fs::copy(db_path, backup_path)?;
+
+    Ok(())
+}
+
+#[derive(Error, Debug)]
+pub enum MigrationError {
+    #[error("Failed to find migration script!")]
+    NoMigrationScript,
     #[error("SQLite error occured: `{0}`")]
-    SqliteError(#[from] sqlite::Error),
+    DatabaseError(#[from] DatabaseError),
 }
 
-fn get_default_db_path() -> Box<Path> {
-    let project_dir = ProjectDirs::from("com", "TeamCounterSpell", "TCSS360-Project");
-    let config_dir = match project_dir.as_ref().map(|d| d.config_dir()) {
-        Some(config_dir) if config_dir.is_dir() => config_dir,
-        Some(config_dir) => {
-            info!("Config directory not found! creating directory!");
-            std::fs::DirBuilder::new()
-                .recursive(true)
-                .create(config_dir)
-                .and(Ok(config_dir))
-                .inspect_err(|e| warn!("Failed to create config directory with: {e}. Resorting to using local directory!"))
-                .unwrap_or(Path::new(""))
-        }
-        Option::None => Path::new(""),
-    };
+const MIN_VERSION_MIGRATEABLE: Version = 3;
+/// Make sure the migrations are set up properly
+const _: () = assert!(DB_VERSION == 3, "UPDATE THE MIGRATION SCRIPT");
 
-    config_dir.join("data.sqlite").into()
+/// MAINTENANCE: UPDATE EVERY DATABASE UPDGRADE
+fn migrate_database(db: &Database, from: Version) -> Result<(), MigrationError> {
+    assert!((MIN_VERSION_MIGRATEABLE..DB_VERSION).contains(&from));
+
+    let mut from = from;
+    _ = &mut from;
+    _ = db;
+
+    //if (from == 1) {
+    //    migrate_from_1_to_2(db)?;
+    //    from = 2;
+    //}
+
+    assert_eq!(
+        from, DB_VERSION,
+        "Failed to find migration script to migrate fully."
+    );
+    Ok(())
 }
+
+//fn migrate_from_1_to_2(db: &Database) -> Result<(), DatabaseError> {
+//    let query = r#"
+//        BEGIN TRANSACTION;
+//        CREATE TABLE Colors(
+//            name  VARCHAR(16) PRIMARY KEY,
+//            color MEDIUMINTEGER
+//        );
+//        UPDATE Version SET version = 2;
+//        COMMIT;
+//    "#;
+//
+//    db.connection.execute(query)?;
+//
+//    Ok(())
+//}
