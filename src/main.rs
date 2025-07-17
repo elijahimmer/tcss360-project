@@ -5,9 +5,9 @@ mod controls;
 mod database;
 mod menu;
 //mod save;
+mod newgame;
 mod sky;
 mod util;
-mod newgame;
 
 pub mod prelude {
     use bevy::prelude::States;
@@ -28,8 +28,8 @@ pub mod prelude {
     pub use crate::menu::MenuPlugin;
     //pub use crate::save::{Save, SavePlugin};
     pub use crate::database::{Database, DatabaseError, DatabasePlugin, FromDatabase, ToDatabase};
-    pub use crate::sky::SkyPlugin;
     pub use crate::newgame::NewGamePlugin;
+    pub use crate::sky::SkyPlugin;
     pub use crate::util::*;
 }
 
