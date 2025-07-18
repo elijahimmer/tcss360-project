@@ -1,4 +1,5 @@
 //! TODO: Display keybinds as icons/characters and inputs and lists of them.
+//! TODO: Remove all the `#[cfg(feature = "sqlite")]` and make it DB agnostic.
 
 use crate::embed_asset;
 use crate::prelude::*;
@@ -32,7 +33,8 @@ impl Plugin for ControlsPlugin {
     }
 }
 
-fn setup_controls(mut commands: Commands, #[cfg(feature = "sqlite")] database: Res<Database>) {
+fn setup_controls(#[cfg(feature = "sqlite")] mut commands: Commands, #[cfg(feature = "sqlite")] database: Res<Database>) {
+    #[cfg(feature = "sqlite")]
     commands.insert_resource(Controls::from_database(&database));
 }
 
@@ -48,8 +50,8 @@ pub struct ControlState {
 impl ControlState {
     /// Registers a press for the given `input`.
     pub fn press(&mut self, input: Control, value: f32) {
-        // Returns `true` if the `input` wasn't pressed.
-        if self.pressed.insert(input, value).is_some() {
+        // Returns `true` if the `input` wasn't pressed before.
+        if self.pressed.insert(input, value).is_none() {
             self.just_pressed.insert(input);
         }
     }
@@ -543,8 +545,8 @@ impl std::fmt::Display for Input {
 
 /// The list of controls for each input
 /// TODO: Implement controller inputs maybe
-#[derive(Resource, Reflect, Clone)]
-#[reflect(Resource)]
+#[derive(Resource, Reflect, Clone, Eq, PartialEq, Debug)]
+#[reflect(Resource, Clone, PartialEq, Debug)]
 pub struct Controls {
     pub move_up: InputList,
     pub move_down: InputList,

@@ -12,10 +12,11 @@ impl Plugin for CameraPlugin {
             .init_resource::<CameraMovementSettings>()
             .add_systems(Startup, camera_setup)
             .add_systems(
-                Update,
+                PostUpdate,
                 (pause_game, (camera_movement, camera_zoom))
                     .chain()
-                    .run_if(in_state(GameState::Game)),
+                    .run_if(in_state(GameState::Game))
+                    .after(bevy::render::camera::camera_system),
             );
     }
 }

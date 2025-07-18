@@ -89,13 +89,13 @@ impl Style {
 
     /// Spawns Node(s) representing inputs, using glyphs where possible.
     pub fn display_input(&self, builder: &mut ChildSpawnerCommands<'_>, input: &Input) {
-        match input_index(input) {
-            Some(index) => {
+        match input_glyph_info(input) {
+            Some((index, size)) => {
                 if index == 0 {
                     builder.spawn((
                         Node {
-                            height: Val::Px(BUTTON_GLYPH_SIZE.y as f32),
-                            width: Val::Px(BUTTON_GLYPH_SIZE.x as f32),
+                            height: Val::Px(size.y as f32),
+                            width: Val::Px(size.x as f32),
                             padding: UiRect::px(0.0, 0.0, 0.0, 2.0),
                             align_items: AlignItems::Center,
                             justify_items: JustifyItems::Center,
@@ -175,13 +175,14 @@ impl Icons {
     pub fn new(asset_server: &AssetServer, path: &str) -> Self {
         let image = asset_server.load(path);
 
-        let layout = TextureAtlasLayout::from_grid(
+        let mut layout = TextureAtlasLayout::from_grid(
             BUTTON_GLYPH_SIZE,
-            7,
-            1,
+            6,
+            2,
             Some(UVec2::ZERO),
             Some(UVec2::ZERO),
         );
+        layout.add_texture(URect::new(0, 72, 64, 108));
         let layout = asset_server.add(layout);
 
         Self { image, layout }
@@ -202,9 +203,11 @@ impl Icons {
 
 /// All the of faint heart, look not upon here,
 /// for it will only bring sorrow.
-fn input_index(input: &Input) -> Option<usize> {
+fn input_glyph_info(input: &Input) -> Option<(usize, UVec2)> {
     use Input as I;
     use KeyCode as K;
+    let glyph_size = UVec2::new(32, 36);
+    let double_wide = UVec2::new(64, 36);
     match input {
         // Single key icons
         I::Keyboard(
@@ -290,29 +293,38 @@ fn input_index(input: &Input) -> Option<usize> {
             | K::F33
             | K::F34
             | K::F35,
-        ) => Some(0),
-        I::Keyboard(K::ArrowLeft) => Some(1),
-        I::Keyboard(K::ArrowRight) => Some(2),
-        I::Keyboard(K::ArrowUp) => Some(3),
-        I::Keyboard(K::ArrowDown) => Some(4),
-        I::Keyboard(K::Tab) => Some(5),
+        ) => Some((0, glyph_size)),
+        I::Keyboard(K::ArrowLeft) => Some((1, glyph_size)),
+        I::Keyboard(K::ArrowRight) => Some((2, glyph_size)),
+        I::Keyboard(K::ArrowUp) => Some((3, glyph_size)),
+        I::Keyboard(K::ArrowDown) => Some((4, glyph_size)),
+        I::Keyboard(K::Tab) => Some((5, glyph_size)),
+        I::Keyboard(K::ShiftLeft) => Some((6, glyph_size)),
+        I::Keyboard(K::CapsLock) => Some((7, glyph_size)),
+        I::Keyboard(K::PageUp) => Some((8, glyph_size)),
+        I::Keyboard(K::PageDown) => Some((9, glyph_size)),
+        I::Keyboard(
+            K::AltLeft
+            | K::AltRight
+            | K::Enter
+            | K::Escape
+            | K::Home
+            | K::Delete
+            | K::End
+            | K::Insert
+            | K::Backspace,
+        ) => Some((12, double_wide)),
         // All of the other keys. We should add some over time.
         I::Keyboard(
             K::Unidentified(_)
             | K::IntlBackslash
             | K::IntlRo
             | K::IntlYen
-            | K::AltLeft
-            | K::AltRight
-            | K::Backspace
-            | K::CapsLock
             | K::ContextMenu
             | K::ControlLeft
             | K::ControlRight
-            | K::Enter
             | K::SuperLeft
             | K::SuperRight
-            | K::ShiftLeft
             | K::ShiftRight
             | K::Space
             | K::Convert
@@ -323,13 +335,7 @@ fn input_index(input: &Input) -> Option<usize> {
             | K::Lang4
             | K::Lang5
             | K::NonConvert
-            | K::Delete
-            | K::End
             | K::Help
-            | K::Home
-            | K::Insert
-            | K::PageDown
-            | K::PageUp
             | K::NumLock
             | K::Numpad0
             | K::Numpad1
@@ -361,7 +367,6 @@ fn input_index(input: &Input) -> Option<usize> {
             | K::NumpadParenRight
             | K::NumpadStar
             | K::NumpadSubtract
-            | K::Escape
             | K::Fn
             | K::FnLock
             | K::PrintScreen
@@ -407,6 +412,9 @@ fn input_index(input: &Input) -> Option<usize> {
             | K::Hiragana
             | K::Katakana,
         ) => None,
-        _ => None,
+        I::Mouse(_) => None,
+        I::MouseWheelAxis(_) => None,
+        I::Gamepad(_) => None,
+        I::GamepadAxis(_) => None,
     }
 }

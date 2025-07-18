@@ -6,7 +6,7 @@ use crate::prelude::*;
 
 use bevy::{
     a11y::AccessibilityNode,
-    ecs::{hierarchy::ChildSpawnerCommands, spawn::SpawnIter},
+    ecs::hierarchy::ChildSpawnerCommands,
     input::{
         ButtonState,
         gamepad::GamepadButtonChangedEvent,
@@ -34,10 +34,7 @@ pub struct MenuPlugin;
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<MenuState>()
-            .add_systems(
-                Update,
-                (menu_action, button_highlight).run_if(in_state(GameState::Menu)),
-            )
+            .add_systems(Update, (button_highlight).run_if(in_state(GameState::Menu)))
             .add_systems(Update, escape_out.run_if(in_state(GameState::Menu)))
             .add_systems(OnEnter(GameState::Menu), menu_screen_enter)
             .add_systems(OnEnter(MenuState::Main), main_enter)
@@ -53,7 +50,7 @@ impl Plugin for MenuPlugin {
                     exited: MenuState::Settings,
                     entered: MenuState::Controls,
                 },
-                controls_enter,
+                (controls_enter, controls_wip_insert),
             )
             .add_systems(
                 OnTransition {
@@ -61,6 +58,12 @@ impl Plugin for MenuPlugin {
                     entered: MenuState::Settings,
                 },
                 despawn_screen::<OnControls>,
+            )
+            .add_systems(
+                Update,
+                controls_changed.run_if(
+                    in_state(MenuState::Controls).and(resource_exists_and_changed::<ControlsWIP>),
+                ),
             )
             .add_systems(OnEnter(MenuState::ControlPrompt), control_prompt_enter)
             .add_systems(
@@ -72,13 +75,25 @@ impl Plugin for MenuPlugin {
             )
             .add_systems(
                 Update,
-                controls_changed.run_if(
-                    in_state(MenuState::Controls).and(resource_exists_and_changed::<Controls>),
+                assign_key_input.run_if(in_state(MenuState::ControlPrompt)),
+            )
+            .add_systems(
+                OnEnter(MenuState::ControlSaveWarning),
+                control_save_warning_enter,
+            )
+            .add_systems(
+                OnExit(MenuState::ControlSaveWarning),
+                (
+                    despawn_screen::<OnControlSaveWarning>,
+                    remove_resource::<ControlsWIP>,
                 ),
             )
             .add_systems(
-                Update,
-                assign_key_input.run_if(in_state(MenuState::ControlPrompt)),
+                OnTransition {
+                    exited: MenuState::ControlSaveWarning,
+                    entered: MenuState::Settings,
+                },
+                despawn_screen::<OnControls>,
             );
     }
 }
@@ -96,6 +111,7 @@ enum MenuState {
     Sound,
     Controls,
     ControlPrompt,
+    ControlSaveWarning,
 }
 
 #[derive(Component)]
@@ -115,6 +131,9 @@ struct OnControls;
 
 #[derive(Component)]
 struct OnControlPrompt;
+
+#[derive(Component)]
+struct OnControlSaveWarning;
 
 /// Specifies the action that should be taken the button it is on is clicked.
 ///
@@ -138,15 +157,30 @@ fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
     menu_state.set(MenuState::Main);
 }
 
-fn escape_out(mut commands: Commands, menu_state: Res<State<MenuState>>, key: Res<ControlState>) {
+fn escape_out(
+    menu_state: Res<State<MenuState>>,
+    mut next_state: ResMut<NextState<MenuState>>,
+    controls_master: Res<Controls>,
+    controls_wip: Option<Res<ControlsWIP>>,
+    key: Res<ControlState>,
+) {
     if key.just_pressed(Control::Pause) {
         use MenuState as M;
         match *menu_state.get() {
             // TODO: Implement title screen and pausing separately.
             M::Disabled | M::Main => {}
-            M::Settings => commands.set_state(MenuState::Main),
-            M::Sound | M::Display | M::Controls => commands.set_state(MenuState::Settings),
-            M::ControlPrompt => {}
+            M::Settings => next_state.set(MenuState::Main),
+            M::Sound | M::Display | M::ControlSaveWarning => next_state.set(MenuState::Settings),
+            M::ControlPrompt => {
+                // don't do anything, it should be caught by [`assign_key_input`]
+            }
+            M::Controls => {
+                if controls_wip.unwrap().0 == *controls_master {
+                    next_state.set(MenuState::Settings);
+                } else {
+                    next_state.set(MenuState::ControlSaveWarning);
+                }
+            }
         }
     }
 }
@@ -167,33 +201,34 @@ fn button_highlight(
     }
 }
 
-fn menu_action(
-    interaction_query: Query<
-        (&Interaction, &MenuButtonAction),
-        (Changed<Interaction>, With<Button>),
-    >,
+fn menu_button_click(
+    mut click: Trigger<Pointer<Click>>,
     mut app_exit_events: EventWriter<AppExit>,
     mut menu_state: ResMut<NextState<MenuState>>,
     mut game_state: ResMut<NextState<GameState>>,
+    target_query: Query<&MenuButtonAction>,
 ) {
-    for (interaction, menu_button_action) in &interaction_query {
-        if *interaction == Interaction::Pressed {
-            match menu_button_action {
-                MenuButtonAction::Quit => {
-                    app_exit_events.write(AppExit::Success);
-                }
-                MenuButtonAction::Play => {
-                    menu_state.set(MenuState::Disabled);
-                    game_state.set(GameState::Game);
-                }
-                MenuButtonAction::Settings => menu_state.set(MenuState::Settings),
-                MenuButtonAction::Controls => menu_state.set(MenuState::Controls),
-                MenuButtonAction::Display => menu_state.set(MenuState::Display),
-                MenuButtonAction::Sound => menu_state.set(MenuState::Sound),
-                MenuButtonAction::MainMenu => menu_state.set(MenuState::Main),
+    if click.button == PointerButton::Primary {
+        let Ok(menu_button_action) = target_query.get(click.target()) else {
+            return;
+        };
+        match menu_button_action {
+            MenuButtonAction::Quit => {
+                app_exit_events.write(AppExit::Success);
             }
+            MenuButtonAction::Play => {
+                menu_state.set(MenuState::Disabled);
+                game_state.set(GameState::Game);
+            }
+            MenuButtonAction::Settings => menu_state.set(MenuState::Settings),
+            MenuButtonAction::Controls => menu_state.set(MenuState::Controls),
+            MenuButtonAction::Display => menu_state.set(MenuState::Display),
+            MenuButtonAction::Sound => menu_state.set(MenuState::Sound),
+            MenuButtonAction::MainMenu => menu_state.set(MenuState::Main),
         }
     }
+
+    click.propagate(false);
 }
 
 fn main_enter(mut commands: Commands, style: Res<Style>) {
@@ -208,77 +243,92 @@ fn main_enter(mut commands: Commands, style: Res<Style>) {
     };
     let button_text_font = style.font(33.0);
 
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        OnMenuScreen,
-        children![(
+    commands
+        .spawn((
             Node {
-                flex_direction: FlexDirection::Column,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 ..default()
             },
-            children![
-                // Display the game name
-                (
-                    Text::new("TCSS360 Project"),
-                    style.font(67.0),
-                    TextColor(TITLE_COLOR),
-                    Node {
-                        margin: UiRect::all(Val::Px(50.0)),
-                        ..default()
-                    },
-                ),
-                // Display three buttons for each action available from the main menu:
-                // - new game
-                // - settings
-                // - quit
-                (
-                    Button,
-                    button_node.clone(),
-                    BackgroundColor(NORMAL_BUTTON),
-                    MenuButtonAction::Play,
-                    children![
-                        //(ImageNode::new(right_icon), button_icon_node.clone()),
-                        (
-                            Text::new("New Game"),
-                            button_text_font.clone(),
-                            TextColor(TEXT_COLOR),
-                        ),
-                    ]
-                ),
-                (
-                    Button,
-                    button_node.clone(),
-                    BackgroundColor(NORMAL_BUTTON),
-                    MenuButtonAction::Settings,
-                    children![
-                        //(ImageNode::new(wrench_icon), button_icon_node.clone()),
-                        (
-                            Text::new("Settings"),
-                            button_text_font.clone(),
-                            TextColor(TEXT_COLOR),
-                        ),
-                    ]
-                ),
-                (
-                    Button,
-                    button_node,
-                    BackgroundColor(NORMAL_BUTTON),
-                    MenuButtonAction::Quit,
-                    children![
-                        //(ImageNode::new(exit_icon), button_icon_node),
-                        (Text::new("Quit"), button_text_font, TextColor(TEXT_COLOR),),
-                    ]
-                ),
-            ]
-        )],
-    ));
+            OnMenuScreen,
+        ))
+        .with_children(|builder| {
+            builder
+                .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|builder| {
+                    // Display the game name
+                    builder.spawn((
+                        Text::new("TCSS360 Project"),
+                        style.font(67.0),
+                        TextColor(TITLE_COLOR),
+                        Node {
+                            margin: UiRect::all(Val::Px(50.0)),
+                            ..default()
+                        },
+                    ));
+                    // Display three buttons for each action available from the main menu:
+                    // - new game
+                    // - settings
+                    // - quit
+                    builder
+                        .spawn((
+                            Button,
+                            button_node.clone(),
+                            BackgroundColor(NORMAL_BUTTON),
+                            MenuButtonAction::Play,
+                            children![
+                                //(ImageNode::new(right_icon), button_icon_node.clone()),
+                                (
+                                    Text::new("New Game"),
+                                    button_text_font.clone(),
+                                    TextColor(TEXT_COLOR),
+                                    Pickable::IGNORE
+                                ),
+                            ],
+                        ))
+                        .observe(menu_button_click);
+                    builder
+                        .spawn((
+                            Button,
+                            button_node.clone(),
+                            BackgroundColor(NORMAL_BUTTON),
+                            MenuButtonAction::Settings,
+                            children![
+                                //(ImageNode::new(wrench_icon), button_icon_node.clone()),
+                                (
+                                    Text::new("Settings"),
+                                    button_text_font.clone(),
+                                    TextColor(TEXT_COLOR),
+                                    Pickable::IGNORE
+                                ),
+                            ],
+                        ))
+                        .observe(menu_button_click);
+                    builder
+                        .spawn((
+                            Button,
+                            button_node,
+                            BackgroundColor(NORMAL_BUTTON),
+                            MenuButtonAction::Quit,
+                            children![
+                                //(ImageNode::new(exit_icon), button_icon_node),
+                                (
+                                    Text::new("Quit"),
+                                    button_text_font,
+                                    TextColor(TEXT_COLOR),
+                                    Pickable::IGNORE
+                                ),
+                            ],
+                        ))
+                        .observe(menu_button_click);
+                });
+        });
 }
 
 fn settings_enter(mut commands: Commands, style: Res<Style>) {
@@ -293,41 +343,49 @@ fn settings_enter(mut commands: Commands, style: Res<Style>) {
 
     let button_text_style = (style.font(33.0), TextColor(TEXT_COLOR));
 
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        OnSettings,
-        children![(
+    commands
+        .spawn((
             Node {
-                flex_direction: FlexDirection::Column,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 ..default()
             },
-            Children::spawn(SpawnIter(
-                [
-                    (MenuButtonAction::Controls, "Controls"),
-                    (MenuButtonAction::Display, "Display"),
-                    (MenuButtonAction::Sound, "Sound"),
-                    (MenuButtonAction::MainMenu, "Back"),
-                ]
-                .into_iter()
-                .map(move |(action, text)| {
-                    (
-                        Button,
-                        button_node.clone(),
-                        BackgroundColor(NORMAL_BUTTON),
-                        action,
-                        children![(Text::new(text), button_text_style.clone())],
-                    )
+            OnSettings,
+        ))
+        .with_children(|builder| {
+            builder
+                .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
                 })
-            ))
-        )],
-    ));
+                .with_children(|builder| {
+                    [
+                        (MenuButtonAction::Controls, "Controls"),
+                        (MenuButtonAction::Display, "Display"),
+                        (MenuButtonAction::Sound, "Sound"),
+                        (MenuButtonAction::MainMenu, "Back"),
+                    ]
+                    .into_iter()
+                    .for_each(|(action, text)| {
+                        builder
+                            .spawn((
+                                Button,
+                                button_node.clone(),
+                                BackgroundColor(NORMAL_BUTTON),
+                                action,
+                                children![(
+                                    Text::new(text),
+                                    button_text_style.clone(),
+                                    Pickable::IGNORE
+                                )],
+                            ))
+                            .observe(menu_button_click);
+                    });
+                });
+        });
 }
 
 fn display_enter(mut commands: Commands, style: Res<Style>) {
@@ -436,12 +494,15 @@ fn sound_enter(mut commands: Commands, style: Res<Style> /*volume: Res<Volume>*/
     ));
 }
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Debug)]
 enum ControlsButtonAction {
     Prompt(Control, usize),
     PromptCancel,
     ResetBoth(Control),
     ResetAll,
+    Save,
+    Discard,
+    Back,
 }
 
 fn controls_enter(mut commands: Commands, style: Res<Style>, controls: Res<Controls>) {
@@ -517,9 +578,31 @@ fn controls_enter(mut commands: Commands, style: Res<Style>, controls: Res<Contr
                         Button,
                         button_node.clone(),
                         BackgroundColor(NORMAL_BUTTON),
-                        MenuButtonAction::Settings,
-                        children![(Text::new("Back"), button_text_style.clone())],
-                    ));
+                        ControlsButtonAction::Back,
+                        children![(Text::new("Back"), button_text_style.clone(), Pickable::IGNORE)],
+                    ))
+                        .observe(controls_menu_click);
+
+                    builder
+                        .spawn((
+                            Button,
+                            button_node.clone(),
+                            BackgroundColor(NORMAL_BUTTON),
+                            ControlsButtonAction::Save,
+                            children![(Text::new("Save"), button_text_style.clone())],
+                        ))
+                        .observe(controls_menu_click);
+
+                    builder
+                        .spawn((
+                            Button,
+                            button_node.clone(),
+                            BackgroundColor(NORMAL_BUTTON),
+                            ControlsButtonAction::Discard,
+                            children![(Text::new("Discard"), button_text_style.clone())],
+                        ))
+                        .observe(controls_menu_click);
+
                     builder
                         .spawn((
                             Button,
@@ -529,6 +612,7 @@ fn controls_enter(mut commands: Commands, style: Res<Style>, controls: Res<Contr
                             children![(Text::new("Reset All"), button_text_style.clone())],
                         ))
                         .observe(controls_menu_click);
+
                     builder.spawn((
                         Text::new(
                             "Note: The keys show are based on the physical key and may not reflect the keyboard input in a text box.",
@@ -623,10 +707,19 @@ fn controls_row(builder: &mut ChildSpawnerCommands<'_>, style: &Style, keybind: 
         });
 }
 
+#[derive(Resource, Default, Reflect)]
+#[reflect(Resource, Default)]
+struct ControlsWIP(Controls);
+
+fn controls_wip_insert(mut commands: Commands, controls_master: Res<Controls>) {
+    commands.insert_resource(ControlsWIP(controls_master.clone()));
+}
+
 fn controls_menu_click(
     mut click: Trigger<Pointer<Click>>,
     mut commands: Commands,
-    mut controls: ResMut<Controls>,
+    mut controls_master: ResMut<Controls>,
+    mut controls_wip: ResMut<ControlsWIP>,
     target_query: Query<&ControlsButtonAction>,
 ) {
     if let Ok(action) = target_query.get(click.target()) {
@@ -638,48 +731,68 @@ fn controls_menu_click(
                 commands.set_state(MenuState::ControlPrompt);
             }
             (P::Secondary, C::Prompt(control, entry)) => {
-                controls.set_control(*control, *entry, None)
+                controls_wip.0.set_control(*control, *entry, None);
             }
-            (P::Middle, C::Prompt(control, entry)) => controls.reset_control_part(*control, *entry),
-
+            (P::Middle, C::Prompt(control, entry)) => {
+                controls_wip.0.reset_control_part(*control, *entry);
+            }
             (P::Primary, C::PromptCancel) => commands.set_state(MenuState::Controls),
             (_, C::PromptCancel) => {}
 
-            (P::Primary, ControlsButtonAction::ResetBoth(control)) => {
-                controls.reset_control(*control)
+            (P::Primary, C::ResetBoth(control)) => {
+                controls_wip.0.reset_control(*control);
             }
             (_, C::ResetBoth(..)) => {}
 
-            (P::Primary, ControlsButtonAction::ResetAll) => controls.reset_controls(),
+            (P::Primary, C::ResetAll) => {
+                controls_wip.0.reset_controls();
+            }
             (_, C::ResetAll) => {}
+
+            (P::Primary, C::Save) => {
+                *controls_master = controls_wip.0.clone();
+            }
+            (_, C::Save) => {}
+
+            (P::Primary, C::Discard) => {
+                controls_wip.0 = controls_master.clone();
+            }
+            (_, C::Discard) => {}
+
+            (P::Primary, C::Back) => {
+                if controls_wip.0 == *controls_master {
+                    commands.set_state(MenuState::Settings);
+                } else {
+                    commands.set_state(MenuState::ControlSaveWarning);
+                }
+            }
+            (_, C::Back) => {}
         }
     }
+
     click.propagate(false);
 }
 
 fn controls_changed(
     mut commands: Commands,
     style: Res<Style>,
-    controls: Res<Controls>,
+    controls: Res<ControlsWIP>,
     button: Query<(Entity, &ControlsButtonAction, &Children)>,
 ) {
     for (entity, action, children) in button.iter() {
         use ControlsButtonAction as C;
-        match action {
-            C::Prompt(control, idx) => {
-                let key = controls.get_control_part(*control, *idx);
-                for child in children {
-                    if let Ok(mut child) = commands.get_entity(*child) {
-                        child.despawn();
-                    }
+        if let C::Prompt(control, idx) = action {
+            let key = controls.0.get_control_part(*control, *idx);
+            for child in children {
+                if let Ok(mut child) = commands.get_entity(*child) {
+                    child.despawn();
                 }
-                commands
-                    .get_entity(entity)
-                    .expect("It was just clicked, it should be alive?")
-                    .remove_children(children)
-                    .with_children(|builder| input_to_screen(&style, builder, &key));
             }
-            C::PromptCancel | C::ResetBoth(..) | C::ResetAll => {}
+            commands
+                .get_entity(entity)
+                .expect("It was just clicked, it should be alive?")
+                .remove_children(children)
+                .with_children(|builder| input_to_screen(&style, builder, &key));
         }
     }
 }
@@ -767,7 +880,7 @@ fn assign_key_input(
     mut keyboard: EventReader<KeyboardInput>,
     mut mouse: EventReader<MouseButtonInput>,
     mut gamepad: EventReader<GamepadButtonChangedEvent>,
-    mut controls: ResMut<Controls>,
+    mut controls: ResMut<ControlsWIP>,
     cancel_button_query: Query<(), With<ControlsButtonAction>>,
     target: Res<ControlPromptTarget>,
     hover_map: Res<HoverMap>,
@@ -775,7 +888,9 @@ fn assign_key_input(
     for ev in keyboard.read() {
         match ev.state {
             ButtonState::Pressed => {
-                controls.set_control(target.0, target.1, Some(Input::Keyboard(ev.key_code)));
+                controls
+                    .0
+                    .set_control(target.0, target.1, Some(Input::Keyboard(ev.key_code)));
                 commands.set_state(MenuState::Controls);
                 return;
             }
@@ -797,7 +912,9 @@ fn assign_key_input(
                     }
                 }
 
-                controls.set_control(target.0, target.1, Some(Input::Mouse(ev.button)));
+                controls
+                    .0
+                    .set_control(target.0, target.1, Some(Input::Mouse(ev.button)));
                 commands.set_state(MenuState::Controls);
                 return;
             }
@@ -808,13 +925,100 @@ fn assign_key_input(
     for ev in gamepad.read() {
         match ev.state {
             ButtonState::Pressed => {
-                controls.set_control(target.0, target.1, Some(Input::Gamepad(ev.button)));
+                controls
+                    .0
+                    .set_control(target.0, target.1, Some(Input::Gamepad(ev.button)));
                 commands.set_state(MenuState::Controls);
                 return;
             }
             ButtonState::Released => {}
         }
     }
+}
+
+fn control_save_warning_enter(mut commands: Commands, style: Res<Style>) {
+    let button_text_style = (
+        style.font(33.0),
+        TextColor(TEXT_COLOR),
+        TextLayout::new_with_justify(JustifyText::Center),
+    );
+
+    commands
+        .spawn((
+            Node {
+                display: Display::Flex,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                align_self: AlignSelf::Center,
+                ..default()
+            },
+            FocusPolicy::Block,
+            OnControlSaveWarning,
+            BackgroundColor(BACKGROUND_COLOR_SOLID),
+            ZIndex(2),
+        ))
+        .with_children(|builder| {
+            builder
+                .spawn(Node {
+                    display: Display::Flex,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|builder| {
+                    builder
+                        .spawn((
+                            Button,
+                            Node {
+                                width: Val::Px(200.0),
+                                height: Val::Px(65.0),
+                                margin: UiRect::all(Val::Px(5.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                align_self: AlignSelf::Center,
+                                ..default()
+                            },
+                            BackgroundColor(NORMAL_BUTTON),
+                            ControlsButtonAction::Save,
+                            MenuButtonAction::Settings,
+                            children![(
+                                Text::new("Save Changes"),
+                                button_text_style.clone(),
+                                ControlsButtonAction::PromptCancel
+                            )],
+                        ))
+                        .observe(controls_menu_click)
+                        .observe(menu_button_click);
+                    builder
+                        .spawn((
+                            Button,
+                            Node {
+                                width: Val::Px(200.0),
+                                height: Val::Px(65.0),
+                                margin: UiRect::all(Val::Px(5.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                align_self: AlignSelf::Center,
+                                ..default()
+                            },
+                            BackgroundColor(NORMAL_BUTTON),
+                            ControlsButtonAction::Discard,
+                            MenuButtonAction::Settings,
+                            children![(
+                                Text::new("Discard Changes"),
+                                button_text_style.clone(),
+                                ControlsButtonAction::PromptCancel
+                            )],
+                        ))
+                        .observe(controls_menu_click)
+                        .observe(menu_button_click);
+                });
+        });
 }
 
 /// Helper method to despawn all of the entities with a given component.
@@ -824,6 +1028,10 @@ fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands
     for entity in &to_despawn {
         commands.entity(entity).despawn();
     }
+}
+
+fn remove_resource<T: Resource>(mut commands: Commands) {
+    commands.remove_resource::<T>();
 }
 
 const CONTROLS_LINE_HEIGHT: f32 = 65.0;
