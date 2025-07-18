@@ -33,9 +33,9 @@ use controls::ControlsPlugin;
 use database::DatabasePlugin;
 use menu::MenuPlugin;
 use newgame::NewGamePlugin;
+use prelude::*;
 use sky::SkyPlugin;
 use style::StylePlugin;
-use prelude::*;
 
 #[cfg(feature = "debug")]
 use bevy::{

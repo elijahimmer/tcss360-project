@@ -643,7 +643,7 @@ const DEFAULT_PAUSE_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::CapsLock)),
 ];
 // TODO: Change this to mouse button left.
-const DEFAULT_SELECT_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::KeyA)), None];
+const DEFAULT_SELECT_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::KeyE)), None];
 
 #[cfg(feature = "sqlite")]
 fn query_keybind_or_set(database: &Database, keybind: &str, default: InputList) -> InputList {
