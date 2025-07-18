@@ -1,5 +1,4 @@
 //! TODO: Display keybinds as icons/characters and inputs and lists of them.
-//! TODO: Remove all the `#[cfg(feature = "sqlite")]` and make it DB agnostic.
 
 use crate::embed_asset;
 use crate::prelude::*;
@@ -8,6 +7,8 @@ use bevy::{input::InputSystem, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::iter::IntoIterator;
+
+const KEYBINDS_DB_TABLE: &str = "Keybinds";
 
 pub struct ControlsPlugin;
 
@@ -23,18 +24,16 @@ impl Plugin for ControlsPlugin {
                 (update_input_state, update_control_state)
                     .chain()
                     .after(InputSystem),
+            )
+            .add_systems(
+                Update,
+                controls_sync
+                    .run_if(resource_changed::<Controls>.and(not(resource_added::<Controls>))),
             );
-
-        #[cfg(feature = "sqlite")]
-        app.add_systems(
-            Update,
-            controls_sync.run_if(resource_changed::<Controls>.and(not(resource_added::<Controls>))),
-        );
     }
 }
 
-fn setup_controls(#[cfg(feature = "sqlite")] mut commands: Commands, #[cfg(feature = "sqlite")] database: Res<Database>) {
-    #[cfg(feature = "sqlite")]
+fn setup_controls(mut commands: Commands, database: Res<Database>) {
     commands.insert_resource(Controls::from_database(&database));
 }
 
@@ -628,6 +627,60 @@ impl Controls {
     pub fn reset_controls(&mut self) {
         *self = default();
     }
+
+    // TODO: Do this in a single transaction maybe? (don't know if it matters)
+    // TODO: add database backend support so we don't need  stub version here
+    fn from_database(db: &Database) -> Self {
+        Self {
+            move_up: db.get_kv_table_or_default(KEYBINDS_DB_TABLE, "move_up", DEFAULT_UP_CONTROLS),
+            move_down: db.get_kv_table_or_default(
+                KEYBINDS_DB_TABLE,
+                "move_down",
+                DEFAULT_DOWN_CONTROLS,
+            ),
+            move_left: db.get_kv_table_or_default(
+                KEYBINDS_DB_TABLE,
+                "move_left",
+                DEFAULT_LEFT_CONTROLS,
+            ),
+            move_right: db.get_kv_table_or_default(
+                KEYBINDS_DB_TABLE,
+                "move_right",
+                DEFAULT_RIGHT_CONTROLS,
+            ),
+            zoom_in: db.get_kv_table_or_default(
+                KEYBINDS_DB_TABLE,
+                "zoom_in",
+                DEFAULT_ZOOM_IN_CONTROLS,
+            ),
+            zoom_out: db.get_kv_table_or_default(
+                KEYBINDS_DB_TABLE,
+                "zoom_out",
+                DEFAULT_ZOOM_OUT_CONTROLS,
+            ),
+            pause: db.get_kv_table_or_default(KEYBINDS_DB_TABLE, "pause", DEFAULT_PAUSE_CONTROLS),
+            select: db.get_kv_table_or_default(
+                KEYBINDS_DB_TABLE,
+                "select",
+                DEFAULT_SELECT_CONTROLS,
+            ),
+        }
+    }
+
+    // TODO: Do this in a single transaction maybe? (don't know if it matters)
+    // TODO: add database backend support so we don't need  stub version here
+    fn to_database(&self, db: &Database) -> Result<(), crate::database::SetKvError> {
+        db.set_kv_table(KEYBINDS_DB_TABLE, "move_up", self.move_up)?;
+        db.set_kv_table(KEYBINDS_DB_TABLE, "move_down", self.move_down)?;
+        db.set_kv_table(KEYBINDS_DB_TABLE, "move_left", self.move_left)?;
+        db.set_kv_table(KEYBINDS_DB_TABLE, "move_right", self.move_right)?;
+        db.set_kv_table(KEYBINDS_DB_TABLE, "zoom_in", self.zoom_in)?;
+        db.set_kv_table(KEYBINDS_DB_TABLE, "zoom_out", self.zoom_out)?;
+        db.set_kv_table(KEYBINDS_DB_TABLE, "pause", self.pause)?;
+        db.set_kv_table(KEYBINDS_DB_TABLE, "select", self.select)?;
+
+        Ok(())
+    }
 }
 
 impl Default for Controls {
@@ -642,52 +695,6 @@ impl Default for Controls {
             pause: DEFAULT_PAUSE_CONTROLS,
             select: DEFAULT_SELECT_CONTROLS,
         }
-    }
-}
-
-// TODO: Do this in a single transaction maybe? (don't know if it matters)
-// TODO: add database backend support so we don't need  stub version here
-impl FromDatabase for Controls {
-    #[cfg(feature = "sqlite")]
-    fn from_database(database: &Database) -> Self {
-        Self {
-            move_up: query_keybind_or_set(database, "move_up", DEFAULT_UP_CONTROLS),
-            move_down: query_keybind_or_set(database, "move_down", DEFAULT_DOWN_CONTROLS),
-            move_left: query_keybind_or_set(database, "move_left", DEFAULT_LEFT_CONTROLS),
-            move_right: query_keybind_or_set(database, "move_right", DEFAULT_RIGHT_CONTROLS),
-            zoom_in: query_keybind_or_set(database, "zoom_in", DEFAULT_ZOOM_IN_CONTROLS),
-            zoom_out: query_keybind_or_set(database, "zoom_out", DEFAULT_ZOOM_OUT_CONTROLS),
-            pause: query_keybind_or_set(database, "pause", DEFAULT_PAUSE_CONTROLS),
-            select: query_keybind_or_set(database, "select", DEFAULT_SELECT_CONTROLS),
-        }
-    }
-
-    #[cfg(not(feature = "sqlite"))]
-    fn from_database(_database: &Database) -> Self {
-        default()
-    }
-}
-
-// TODO: Do this in a single transaction maybe? (don't know if it matters)
-// TODO: add database backend support so we don't need  stub version here
-impl ToDatabase for Controls {
-    #[cfg(feature = "sqlite")]
-    fn to_database(&self, database: &Database) -> Result<(), DatabaseError> {
-        set_keybind(database, "move_up", self.move_up)?;
-        set_keybind(database, "move_down", self.move_down)?;
-        set_keybind(database, "move_left", self.move_left)?;
-        set_keybind(database, "move_right", self.move_right)?;
-        set_keybind(database, "zoom_in", self.zoom_in)?;
-        set_keybind(database, "zoom_out", self.zoom_out)?;
-        set_keybind(database, "pause", self.pause)?;
-        set_keybind(database, "select", self.select)?;
-
-        Ok(())
-    }
-
-    #[cfg(not(feature = "sqlite"))]
-    fn to_database(&self, _database: &Database) -> Result<(), DatabaseError> {
-        Ok(())
     }
 }
 
@@ -809,84 +816,6 @@ const DEFAULT_SELECT_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::KeyE)),
 ];
 
-#[cfg(feature = "sqlite")]
-fn query_keybind_or_set(database: &Database, keybind: &str, default: InputList) -> InputList {
-    query_keybind_or_set_fallible(database, keybind, default)
-        .inspect_err(|err| {
-            warn!("Failed to get Keybind: '{keybind}' from sqlite with error: {err}")
-        })
-        .unwrap_or(default)
-}
-
-#[cfg(feature = "sqlite")]
-fn query_keybind_or_set_fallible(
-    database: &Database,
-    keybind: &str,
-    default: InputList,
-) -> Result<InputList, sqlite::Error> {
-    Ok(match query_keybind(database, keybind)? {
-        Some(kb) => kb,
-        Option::None => {
-            warn!(
-                "Keybind {keybind} not found in database! (this is expected first boot) Inserting now..."
-            );
-            set_keybind(database, keybind, default)?;
-
-            default
-        }
-    })
-}
-
-#[cfg(feature = "sqlite")]
-fn query_keybind(database: &Database, keybind: &str) -> Result<Option<InputList>, sqlite::Error> {
-    let query = "SELECT key1,key2 FROM Keybinds WHERE keybind = :keybind";
-
-    let mut statement = database.connection.prepare(query)?;
-    statement.bind((":keybind", keybind))?;
-
-    if let sqlite::State::Done = statement.next()? {
-        return Ok(None);
-    }
-    assert_eq!(
-        statement.column_count(),
-        2,
-        "There should only be 3 columns in this table"
-    );
-
-    // read the value column index.
-    let key1 = statement.read::<Option<String>, usize>(0)?;
-    let key2 = statement.read::<Option<String>, usize>(1)?;
-
-    assert!(matches!(statement.next()?, sqlite::State::Done));
-
-    Ok(Some([
-        key1.map(|v| ron::from_str::<Input>(&v).unwrap()),
-        key2.map(|v| ron::from_str::<Input>(&v).unwrap()),
-    ]))
-}
-
-#[cfg(feature = "sqlite")]
-fn set_keybind(database: &Database, keybind: &str, value: InputList) -> Result<(), sqlite::Error> {
-    let query = "INSERT OR REPLACE INTO Keybinds VALUES (:keybind, :key1, :key2)";
-
-    let values = [
-        value[0].and_then(|v| ron::to_string(&v).ok()),
-        value[1].and_then(|v| ron::to_string(&v).ok()),
-    ];
-
-    let mut statement = database.connection.prepare(query)?;
-    statement.bind((":keybind", keybind))?;
-    statement.bind_iter([
-        (":key1", values[0].as_deref()),
-        (":key2", values[1].as_deref()),
-    ])?;
-
-    assert!(matches!(statement.next()?, sqlite::State::Done));
-
-    Ok(())
-}
-
-#[cfg(feature = "sqlite")]
 fn controls_sync(database: Res<Database>, controls: Res<Controls>) {
     match controls.to_database(&database) {
         Ok(()) => {}

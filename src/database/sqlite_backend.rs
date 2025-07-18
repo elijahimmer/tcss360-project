@@ -17,7 +17,7 @@ pub type DatabaseError = sqlite::Error;
 
 type Version = i64;
 
-const DB_VERSION: Version = 4;
+const DB_VERSION: Version = 5;
 
 const ADD_SCHEMA: &str = formatcp!(
     r#"
@@ -32,12 +32,11 @@ INSERT INTO Version VALUES ({DB_VERSION});
 CREATE TABLE KeyValue(
     key   TEXT PRIMARY KEY,
     value ANY
-);
+) STRICT;
 
 CREATE TABLE Keybinds(
-    keybind TEXT PRIMARY KEY,
-    key1    TEXT,
-    key2    TEXT
+    key   TEXT PRIMARY KEY,
+    value TEXT
 ) STRICT;
 
 CREATE TABLE Style(
@@ -369,7 +368,7 @@ pub enum ValidateSchemaError {
     DatabaseError(#[from] DatabaseError),
 }
 
-const _: () = assert!(DB_VERSION == 4, "UPDATE VALIDATE SCRIPT");
+const _: () = assert!(DB_VERSION == 5, "UPDATE VALIDATE SCRIPT");
 fn validate_schema(db: &Database) -> Result<(), ValidateSchemaError> {
     let mut statement = db
         .connection
@@ -379,11 +378,7 @@ fn validate_schema(db: &Database) -> Result<(), ValidateSchemaError> {
 
     validate_table(db, "Version", &[("version", "INTEGER")])?;
     validate_table(db, "KeyValue", &[("key", "TEXT"), ("value", "ANY")])?;
-    validate_table(
-        db,
-        "Keybinds",
-        &[("keybind", "TEXT"), ("key1", "TEXT"), ("key2", "TEXT")],
-    )?;
+    validate_table(db, "Keybinds", &[("key", "TEXT"), ("value", "TEXT")])?;
     validate_table(db, "Style", &[("key", "TEXT"), ("value", "ANY")])?;
 
     Ok(())
@@ -470,7 +465,7 @@ pub enum MigrationError {
 
 const MIN_VERSION_MIGRATEABLE: Version = 3;
 /// Make sure the migrations are set up properly
-const _: () = assert!(DB_VERSION == 4, "UPDATE THE MIGRATION SCRIPT");
+const _: () = assert!(DB_VERSION == 5, "UPDATE THE MIGRATION SCRIPT");
 
 /// MAINTENANCE: UPDATE EVERY DATABASE UPDGRADE
 fn migrate_database(db: &Database, from: Version) -> Result<(), MigrationError> {
@@ -481,6 +476,11 @@ fn migrate_database(db: &Database, from: Version) -> Result<(), MigrationError> 
     if from == 3 {
         migrate_from_3_to_4(db)?;
         from = 4;
+    }
+
+    if from == 4 {
+        migrate_from_4_to_5(db)?;
+        from = 5;
     }
 
     assert_eq!(
@@ -502,6 +502,31 @@ fn migrate_from_3_to_4(db: &Database) -> Result<(), DatabaseError> {
             key   TEXT PRIMARY KEY,
             value ANY
         ) STRICT;
+
+        COMMIT;
+    "#;
+
+    db.connection.execute(query)?;
+
+    Ok(())
+}
+
+fn migrate_from_4_to_5(db: &Database) -> Result<(), DatabaseError> {
+    let query = r#"
+        BEGIN TRANSACTION;
+
+        UPDATE Version SET version = 5;
+
+        UPDATE Keybinds Set key1 = CONCAT('Some(', key1, ')') WHERE key1 IS NOT NULL;
+        UPDATE Keybinds Set key2 = CONCAT('Some(', key2, ')') WHERE key2 IS NOT NULL;
+        UPDATE Keybinds Set key1 = 'None' WHERE key1 IS NULL;
+        UPDATE Keybinds Set key2 = 'None' WHERE key2 IS NULL;
+
+        UPDATE Keybinds SET key1 = CONCAT('(', key1, ',', key2, ')');
+
+        ALTER TABLE Keybinds DROP COLUMN key2;
+        ALTER TABLE Keybinds RENAME COLUMN key1 TO value;
+        ALTER TABLE Keybinds RENAME COLUMN keybind TO key;
 
         COMMIT;
     "#;
