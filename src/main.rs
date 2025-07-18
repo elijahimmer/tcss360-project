@@ -28,13 +28,13 @@ pub mod prelude {
     pub use crate::util::*;
 }
 
-use crate::camera::CameraPlugin;
-use crate::controls::ControlsPlugin;
-use crate::database::DatabasePlugin;
-use crate::menu::MenuPlugin;
-use crate::newgame::NewGamePlugin;
-use crate::sky::SkyPlugin;
-use crate::style::StylePlugin;
+use camera::CameraPlugin;
+use controls::ControlsPlugin;
+use database::DatabasePlugin;
+use menu::MenuPlugin;
+use newgame::NewGamePlugin;
+use sky::SkyPlugin;
+use style::StylePlugin;
 use prelude::*;
 
 #[cfg(feature = "debug")]
@@ -84,7 +84,6 @@ fn main() {
     // State
     app.init_state::<GameState>();
     // Local Plugins
-    #[cfg(feature = "sqlite")]
     app.add_plugins(DatabasePlugin);
 
     app.add_plugins(StylePlugin)

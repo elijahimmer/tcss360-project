@@ -14,13 +14,13 @@ impl Database {
 
     pub fn get_kv_table_direct<T>(
         &self,
-        table: &str,
+        _table: &str,
         _key: &str,
     ) -> Result<Option<T>, DatabaseError> {
         Ok(None)
     }
 
-    pub fn get_kv_table<T>(&self, table: &str, _key: &str) -> Result<Option<T>, DatabaseError> {
+    pub fn get_kv_table<T>(&self, _table: &str, _key: &str) -> Result<Option<T>, DatabaseError> {
         Ok(None)
     }
 
@@ -28,36 +28,54 @@ impl Database {
         Ok(None)
     }
 
-    pub fn get_kv<T>(&self, _key: &str) -> Result<Option<T>, DatabaseError> {
+    pub fn get_kv<T>(&self, _key: &str) -> Result<Option<T>, GetKvError> {
         Ok(None)
     }
 
-    pub fn get_kv_table_direct_or_default<T>(&self, _table: &str, _key: &str, default: T) -> T {
-        default
-    }
-
-    pub fn get_kv_table_or_default<T>(
+    pub fn get_kv_table_direct_or_default<T, U: Into<T>>(
         &self,
         _table: &str,
         _key: &str,
-        default: T,
-    ) -> Result<Option<T>, DatabaseError> {
-        default
+        default: U,
+    ) -> T {
+        default.into()
+    }
+
+    pub fn get_kv_table_or_default<T, U: Into<T>>(
+        &self,
+        _table: &str,
+        _key: &str,
+        default: U,
+    ) -> T {
+        default.into()
     }
 
     pub fn set_kv_direct<T>(&self, _key: &str, _value: T) -> Result<(), DatabaseError> {
         Ok(())
     }
 
-    pub fn set_kv<T>(&self, _key: &str) -> Result<(), DatabaseError> {
+    pub fn set_kv<T>(&self, _key: &str) -> Result<(), SetKvError> {
         Ok(())
     }
 
-    pub fn set_kv_table_direct<T>(&self, _key: &str, _value: T) -> Result<(), DatabaseError> {
+    pub fn set_kv_table_direct<T>(
+        &self,
+        _table: &str,
+        _key: &str,
+        _value: T,
+    ) -> Result<(), DatabaseError> {
         Ok(())
     }
 
-    pub fn set_kv_table<T>(&self, _key: &str) -> Result<(), DatabaseError> {
+    pub fn set_kv_table<T>(
+        &self,
+        _table: &str,
+        _key: &str,
+        _value: T,
+    ) -> Result<(), DatabaseError> {
         Ok(())
     }
 }
+
+pub type GetKvError = DatabaseError;
+pub type SetKvError = DatabaseError;
