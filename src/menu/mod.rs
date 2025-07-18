@@ -400,30 +400,38 @@ fn display_enter(mut commands: Commands, style: Res<Style>) {
 
     let button_text_style = (style.font(33.0), TextColor(TEXT_COLOR));
 
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        OnDisplay,
-        children![(
+    commands
+        .spawn((
             Node {
-                flex_direction: FlexDirection::Column,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 ..default()
             },
-            children![(
-                Button,
-                button_node.clone(),
-                BackgroundColor(NORMAL_BUTTON),
-                MenuButtonAction::Settings,
-                children![(Text::new("Back"), button_text_style.clone())],
-            )]
-        )],
-    ));
+            OnDisplay,
+        ))
+        .with_children(|builder| {
+            builder
+                .spawn(
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                )
+                .with_children(|builder| {
+                    builder
+                        .spawn((
+                            Button,
+                            button_node.clone(),
+                            BackgroundColor(NORMAL_BUTTON),
+                            MenuButtonAction::Settings,
+                            children![(Text::new("Back"), button_text_style.clone())],
+                        ))
+                        .observe(menu_button_click);
+                });
+        });
 }
 
 fn sound_enter(mut commands: Commands, style: Res<Style> /*volume: Res<Volume>*/) {
@@ -442,56 +450,38 @@ fn sound_enter(mut commands: Commands, style: Res<Style> /*volume: Res<Volume>*/
     );
 
     //let button_node_clone = button_node.clone();
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        OnSoundScreen,
-        children![(
+    commands
+        .spawn((
             Node {
-                flex_direction: FlexDirection::Column,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 ..default()
             },
-            children![
-                //(
-                //    Node {
-                //        align_items: AlignItems::Center,
-                //        ..default()
-                //    },
-                //    Children::spawn((
-                //        Spawn((Text::new("Volume"), button_text_style.clone())),
-                //        SpawnWith(move |parent: &mut ChildSpawner| {
-                //            for volume_setting in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] {
-                //                let mut entity = parent.spawn((
-                //                    Button,
-                //                    Node {
-                //                        width: Val::Px(30.0),
-                //                        height: Val::Px(65.0),
-                //                        ..button_node_clone.clone()
-                //                    },
-                //                    Volume(volume_setting),
-                //                ));
-                //                if volume == Volume(volume_setting) {
-                //                    entity.insert(SelectedOption);
-                //                }
-                //            }
-                //        })
-                //    ))
-                //),
-                (
-                    Button,
-                    button_node,
-                    MenuButtonAction::Settings,
-                    children![(Text::new("Back"), button_text_style)]
+            OnSoundScreen,
+        ))
+        .with_children(|builder| {
+            builder
+                .spawn(
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
                 )
-            ]
-        )],
-    ));
+                .with_children(|builder| {
+                    builder
+                        .spawn((
+                            Button,
+                            button_node.clone(),
+                            BackgroundColor(NORMAL_BUTTON),
+                            MenuButtonAction::Settings,
+                            children![(Text::new("Back"), button_text_style.clone())],
+                        ))
+                        .observe(menu_button_click);
+                });
+        });
 }
 
 #[derive(Component, Clone, Debug)]
