@@ -55,8 +55,8 @@
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
       };
 
-      defaultPackage = packages.tcss360-project;
-      packages.tcss360-project = pkgs.callPackage ./package.nix {};
+      defaultPackage = packages.a-hex-befalls;
+      packages.a-hex-befalls = pkgs.callPackage ./package.nix {};
 
       formatter = pkgs.alejandra;
     });

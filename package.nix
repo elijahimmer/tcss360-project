@@ -10,7 +10,7 @@
   udev,
 }:
 rustPlatform.buildRustPackage rec {
-  pname = "tcss360-project";
+  pname = "a-hex-befalls";
   version = "0.1.0";
 
   src = ./.;
@@ -41,15 +41,15 @@ rustPlatform.buildRustPackage rec {
     ];
 
   postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
-    patchelf $out/bin/tcss360-project \
+    patchelf $out/bin/a-hex-befalls \
       --add-rpath ${lib.makeLibraryPath buildInputs}
   '';
 
   meta = {
     description = "A School project that happens to be a game.";
-    homepage = "https://github.com/elijahimmer/tcss360-project";
-    changelog = "https://github.com/elijahimmer/tcss360-project/blob/v${version}/CHANGELOG.md";
+    homepage = "https://github.com/elijahimmer/a-hex-befalls";
+    changelog = "https://github.com/elijahimmer/a-hex-befalls/blob/v${version}/CHANGELOG.md";
     license = lib.licenses.mit;
-    mainProgram = "tcss360-project";
+    mainProgram = "a-hex-befalls";
   };
 }

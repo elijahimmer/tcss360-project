@@ -3,6 +3,26 @@
 version = 4
 
 [[package]]
+name = "a-hex-befalls"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "bevy",
+ "bevy_ecs_tilemap",
+ "blake3",
+ "chrono",
+ "const_format",
+ "directories",
+ "getrandom 0.3.3",
+ "rand 0.9.1",
+ "ron 0.10.1",
+ "serde",
+ "sqlite",
+ "thiserror 2.0.12",
+ "wyrand",
+]
+
+[[package]]
 name = "accesskit"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4025,26 +4045,6 @@ dependencies = [
  "grid",
  "serde",
  "slotmap",
-]
-
-[[package]]
-name = "tcss360-project"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "bevy",
- "bevy_ecs_tilemap",
- "blake3",
- "chrono",
- "const_format",
- "directories",
- "getrandom 0.3.3",
- "rand 0.9.1",
- "ron 0.10.1",
- "serde",
- "sqlite",
- "thiserror 2.0.12",
- "wyrand",
 ]
 
 [[package]]

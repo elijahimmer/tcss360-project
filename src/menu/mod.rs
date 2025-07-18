@@ -264,7 +264,7 @@ fn main_enter(mut commands: Commands, style: Res<Style>) {
                 .with_children(|builder| {
                     // Display the game name
                     builder.spawn((
-                        Text::new("TCSS360 Project"),
+                        Text::new("A Hex Befalls\nThe Hexagons"),
                         style.font(67.0),
                         TextColor(TITLE_COLOR),
                         Node {

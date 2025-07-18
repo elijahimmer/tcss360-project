@@ -39,7 +39,7 @@ pub trait ToDatabase {
 /// This isn't only for sqlite, but for anything that needs it.
 #[cfg(feature = "sqlite")]
 fn get_default_db_directory() -> PathBuf {
-    let project_dir = directories::ProjectDirs::from("com", "TeamCounterSpell", "TCSS360-Project");
+    let project_dir = directories::ProjectDirs::from("com", "TeamCounterSpell", "A-Hex-Befalls-The-Hexagons");
     match project_dir.as_ref().map(|d| d.config_dir()) {
         Some(config_dir) if config_dir.is_dir() => config_dir.into(),
         Some(config_dir) => {
