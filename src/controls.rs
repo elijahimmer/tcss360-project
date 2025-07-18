@@ -2,12 +2,10 @@
 
 use crate::embed_asset;
 use crate::prelude::*;
-use bevy::ecs::relationship::{RelatedSpawnerCommands, Relationship};
+use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::{input::InputSystem, prelude::*};
 use serde::{Deserialize, Serialize};
 use std::iter::IntoIterator;
-
-const BUTTON_SPRITE_IMAGE_PATH: &str = "embedded://assets/sprites/buttons.png";
 
 pub struct ControlsPlugin;
 
@@ -16,7 +14,7 @@ impl Plugin for ControlsPlugin {
         embed_asset!(app, "assets/sprites/buttons.png");
 
         app.add_systems(Startup, setup_controls)
-            .init_resource::<InputState>()
+            .init_resource::<ControlState>()
             .init_resource::<ButtonInput<Input>>()
             .add_systems(
                 PreUpdate,
@@ -40,7 +38,7 @@ fn setup_controls(mut commands: Commands, #[cfg(feature = "sqlite")] database: R
     commands.insert_resource(Controls::default());
 }
 
-pub type InputState = ButtonInput<Control>;
+pub type ControlState = ButtonInput<Control>;
 
 fn update_input_state(
     mut input_state: ResMut<ButtonInput<Input>>,
@@ -78,7 +76,7 @@ fn update_input_state(
 }
 
 fn update_control_state(
-    mut control_state: ResMut<InputState>,
+    mut control_state: ResMut<ControlState>,
     input_state: Res<ButtonInput<Input>>,
     controls: Res<Controls>,
 ) {
@@ -108,24 +106,16 @@ fn update_control_state(
 pub struct Keybind(pub Control, pub InputList);
 
 impl Keybind {
-    pub fn to_screen<R: Relationship>(
-        &self,
-        _style: &Style,
-        _builder: &mut RelatedSpawnerCommands<'_, R>,
-    ) {
+    pub fn to_screen(&self, _style: &Style, _builder: &mut ChildSpawnerCommands) {
         todo!("display multiple");
     }
 }
 
 const TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
 
-pub fn input_to_screen<R: Relationship>(
-    style: &Style,
-    builder: &mut RelatedSpawnerCommands<'_, R>,
-    input: &Option<Input>,
-) {
+pub fn input_to_screen(style: &Style, builder: &mut ChildSpawnerCommands, input: &Option<Input>) {
     match input {
-        Some(input) => input.to_screen(style, builder),
+        Some(input) => style.display_input(builder, input),
         None => {
             builder.spawn((
                 Text::new("Not Bound"),
@@ -157,33 +147,237 @@ pub enum Input {
     Gamepad(GamepadButton),
 }
 
-impl Input {
-    pub fn to_screen<R: Relationship>(
-        &self,
-        style: &Style,
-        builder: &mut RelatedSpawnerCommands<'_, R>,
-    ) {
+// sometimes, you just have to do this...
+impl std::fmt::Display for Input {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        use GamepadButton as G;
+        use Input as I;
+        use KeyCode as K;
+        use MouseButton as M;
         match self {
-            //Self::Keyboard(KeyCode::KeyW) => {
-            //    let icon = style.icons;
-            //    builder.spawn((
-            //        ImageNode::new(icon),
-            //        Node {
-            //            // This will set the logo to be 200px wide, and auto adjust its height
-            //            width: Val::Px(200.0),
-            //            ..default()
-            //        },
-            //    ));
-            //}
-            _ => {
-                builder.spawn((
-                    Text::new(ron::to_string(self).unwrap()),
-                    style.font(33.0),
-                    TextColor(TEXT_COLOR),
-                    Label,
-                    Pickable::IGNORE,
-                ));
-            }
+            I::Keyboard(K::Unidentified(_)) => write!(f, "Unidentified"),
+            I::Keyboard(K::Backquote) => write!(f, "`"),
+            I::Keyboard(K::Backslash) => write!(f, "\\"),
+            I::Keyboard(K::BracketLeft) => write!(f, "["),
+            I::Keyboard(K::BracketRight) => write!(f, "]"),
+            I::Keyboard(K::Comma) => write!(f, ","),
+            I::Keyboard(K::Digit0) => write!(f, "0"),
+            I::Keyboard(K::Digit1) => write!(f, "1"),
+            I::Keyboard(K::Digit2) => write!(f, "2"),
+            I::Keyboard(K::Digit3) => write!(f, "3"),
+            I::Keyboard(K::Digit4) => write!(f, "4"),
+            I::Keyboard(K::Digit5) => write!(f, "5"),
+            I::Keyboard(K::Digit6) => write!(f, "6"),
+            I::Keyboard(K::Digit7) => write!(f, "7"),
+            I::Keyboard(K::Digit8) => write!(f, "8"),
+            I::Keyboard(K::Digit9) => write!(f, "9"),
+            I::Keyboard(K::Equal) => write!(f, "="),
+            // should be show this as a backslash?
+            I::Keyboard(K::IntlBackslash) => write!(f, "\\"),
+            // should be show this as a backslash?
+            I::Keyboard(K::IntlRo) => write!(f, "\\"),
+            I::Keyboard(K::IntlYen) => write!(f, "¥"),
+            I::Keyboard(K::KeyA) => write!(f, "A"),
+            I::Keyboard(K::KeyB) => write!(f, "B"),
+            I::Keyboard(K::KeyC) => write!(f, "C"),
+            I::Keyboard(K::KeyD) => write!(f, "D"),
+            I::Keyboard(K::KeyE) => write!(f, "E"),
+            I::Keyboard(K::KeyF) => write!(f, "F"),
+            I::Keyboard(K::KeyG) => write!(f, "G"),
+            I::Keyboard(K::KeyH) => write!(f, "H"),
+            I::Keyboard(K::KeyI) => write!(f, "I"),
+            I::Keyboard(K::KeyJ) => write!(f, "J"),
+            I::Keyboard(K::KeyK) => write!(f, "K"),
+            I::Keyboard(K::KeyL) => write!(f, "L"),
+            I::Keyboard(K::KeyM) => write!(f, "M"),
+            I::Keyboard(K::KeyN) => write!(f, "N"),
+            I::Keyboard(K::KeyO) => write!(f, "O"),
+            I::Keyboard(K::KeyP) => write!(f, "P"),
+            I::Keyboard(K::KeyQ) => write!(f, "Q"),
+            I::Keyboard(K::KeyR) => write!(f, "R"),
+            I::Keyboard(K::KeyS) => write!(f, "S"),
+            I::Keyboard(K::KeyT) => write!(f, "T"),
+            I::Keyboard(K::KeyU) => write!(f, "U"),
+            I::Keyboard(K::KeyV) => write!(f, "V"),
+            I::Keyboard(K::KeyW) => write!(f, "W"),
+            I::Keyboard(K::KeyX) => write!(f, "X"),
+            I::Keyboard(K::KeyY) => write!(f, "Y"),
+            I::Keyboard(K::KeyZ) => write!(f, "Z"),
+            I::Keyboard(K::Minus) => write!(f, "-"),
+            I::Keyboard(K::Period) => write!(f, "."),
+            I::Keyboard(K::Quote) => write!(f, "'"),
+            I::Keyboard(K::Semicolon) => write!(f, ";"),
+            I::Keyboard(K::Slash) => write!(f, "/"),
+            I::Keyboard(K::AltLeft) => write!(f, "ALT"),
+            I::Keyboard(K::AltRight) => write!(f, "RIGHT ALT"),
+            I::Keyboard(K::Backspace) => write!(f, "BACKSPACE"),
+            I::Keyboard(K::CapsLock) => write!(f, "CAPS"),
+            I::Keyboard(K::ContextMenu) => write!(f, "CONTEXT MENU"),
+            I::Keyboard(K::ControlLeft) => write!(f, "CTRL"),
+            I::Keyboard(K::ControlRight) => write!(f, "RIGHT CTRL"),
+            I::Keyboard(K::Enter) => write!(f, "ENTER"),
+            I::Keyboard(K::SuperLeft) => write!(f, "OS"),
+            I::Keyboard(K::SuperRight) => write!(f, "OS RIGHT"),
+            I::Keyboard(K::ShiftLeft) => write!(f, "SHIFT"),
+            I::Keyboard(K::ShiftRight) => write!(f, "RIGHT SHIFT"),
+            I::Keyboard(K::Space) => write!(f, "SPACE"),
+            I::Keyboard(K::Tab) => write!(f, "TAB"),
+            I::Keyboard(K::Convert) => write!(f, "CONVERT"),
+            I::Keyboard(K::KanaMode) => write!(f, "KANA MODE"),
+            I::Keyboard(K::Lang1) => write!(f, "LANG 1"),
+            I::Keyboard(K::Lang2) => write!(f, "LANG 2"),
+            I::Keyboard(K::Lang3) => write!(f, "LANG 3"),
+            I::Keyboard(K::Lang4) => write!(f, "LANG 4"),
+            I::Keyboard(K::Lang5) => write!(f, "LANG 5"),
+            I::Keyboard(K::NonConvert) => write!(f, "NON-CONVERT"),
+            I::Keyboard(K::Delete) => write!(f, "DELETE"),
+            I::Keyboard(K::End) => write!(f, "END"),
+            I::Keyboard(K::Help) => write!(f, "HELP"),
+            I::Keyboard(K::Home) => write!(f, "HOME"),
+            I::Keyboard(K::Insert) => write!(f, "INSERT"),
+            I::Keyboard(K::PageDown) => write!(f, "PAGE DOWN"),
+            I::Keyboard(K::PageUp) => write!(f, "PAGE UP"),
+            I::Keyboard(K::ArrowDown) => write!(f, "DOWN ARROW"),
+            I::Keyboard(K::ArrowLeft) => write!(f, "LEFT ARROW"),
+            I::Keyboard(K::ArrowRight) => write!(f, "RIGHT ARROW"),
+            I::Keyboard(K::ArrowUp) => write!(f, "UP ARROW"),
+            I::Keyboard(K::NumLock) => write!(f, "NUM LOCK"),
+            I::Keyboard(K::Numpad0) => write!(f, "NUMPAD 0"),
+            I::Keyboard(K::Numpad1) => write!(f, "NUMPAD 1"),
+            I::Keyboard(K::Numpad2) => write!(f, "NUMPAD 2"),
+            I::Keyboard(K::Numpad3) => write!(f, "NUMPAD 3"),
+            I::Keyboard(K::Numpad4) => write!(f, "NUMPAD 4"),
+            I::Keyboard(K::Numpad5) => write!(f, "NUMPAD 5"),
+            I::Keyboard(K::Numpad6) => write!(f, "NUMPAD 6"),
+            I::Keyboard(K::Numpad7) => write!(f, "NUMPAD 7"),
+            I::Keyboard(K::Numpad8) => write!(f, "NUMPAD 8"),
+            I::Keyboard(K::Numpad9) => write!(f, "NUMPAD 9"),
+            I::Keyboard(K::NumpadAdd) => write!(f, "NUMPAD +"),
+            I::Keyboard(K::NumpadBackspace) => write!(f, "NUMPAD BACKSPACE"),
+            I::Keyboard(K::NumpadClear) => write!(f, "NUMPAD CLEAR"),
+            I::Keyboard(K::NumpadClearEntry) => write!(f, "NUMPAD CLEAR ENTRY"),
+            I::Keyboard(K::NumpadComma) => write!(f, "NUMPAD ,"),
+            I::Keyboard(K::NumpadDecimal) => write!(f, "NUMPAD ."),
+            I::Keyboard(K::NumpadDivide) => write!(f, "NUMPAD /"),
+            I::Keyboard(K::NumpadEnter) => write!(f, "NUMPAD ENTER"),
+            I::Keyboard(K::NumpadEqual) => write!(f, "NUMPAD ="),
+            I::Keyboard(K::NumpadHash) => write!(f, "NUMPAD #"),
+            I::Keyboard(K::NumpadMemoryAdd) => write!(f, "NUMPAD MEMORY ADD"),
+            I::Keyboard(K::NumpadMemoryClear) => write!(f, "NUMPAD MEMORY CLEAR"),
+            I::Keyboard(K::NumpadMemoryRecall) => write!(f, "NUMPAD MEMORY RECALL"),
+            I::Keyboard(K::NumpadMemoryStore) => write!(f, "NUMPAD MEMORY STORE"),
+            I::Keyboard(K::NumpadMemorySubtract) => write!(f, "NUMPAD MEMORY SUBTRACT"),
+            I::Keyboard(K::NumpadMultiply) => write!(f, "NUMPAD MULTIPLY"),
+            I::Keyboard(K::NumpadParenLeft) => write!(f, "NUMPAD ("),
+            I::Keyboard(K::NumpadParenRight) => write!(f, "NUMPAD )"),
+            I::Keyboard(K::NumpadStar) => write!(f, "NUMPAD STAR"),
+            I::Keyboard(K::NumpadSubtract) => write!(f, "NUMPAD -"),
+            I::Keyboard(K::Escape) => write!(f, "ESC"),
+            I::Keyboard(K::Fn) => write!(f, "FN"),
+            I::Keyboard(K::FnLock) => write!(f, "FN LOCK"),
+            I::Keyboard(K::PrintScreen) => write!(f, "PRINT SCREEN"),
+            I::Keyboard(K::ScrollLock) => write!(f, "SCROLL LOCK"),
+            I::Keyboard(K::Pause) => write!(f, "PAUSE"),
+            I::Keyboard(K::BrowserBack) => write!(f, "BROWSER BACK"),
+            I::Keyboard(K::BrowserFavorites) => write!(f, "BROWSER FAVORITES"),
+            I::Keyboard(K::BrowserForward) => write!(f, "BROWSER FORWARD"),
+            I::Keyboard(K::BrowserHome) => write!(f, "BROWSER HOME"),
+            I::Keyboard(K::BrowserRefresh) => write!(f, "BROWSER REFRESH"),
+            I::Keyboard(K::BrowserSearch) => write!(f, "BROWSER SEARCH"),
+            I::Keyboard(K::BrowserStop) => write!(f, "BROWSER STOP"),
+            I::Keyboard(K::Eject) => write!(f, "EJECT"),
+            I::Keyboard(K::LaunchApp1) => write!(f, "LAUNCH APP 1"),
+            I::Keyboard(K::LaunchApp2) => write!(f, "LAUNCH APP 2"),
+            I::Keyboard(K::LaunchMail) => write!(f, "LAUNCH APP 3"),
+            I::Keyboard(K::MediaPlayPause) => write!(f, "MEDIA PAUSE"),
+            I::Keyboard(K::MediaSelect) => write!(f, "MEDIA SELECT"),
+            I::Keyboard(K::MediaStop) => write!(f, "MEDIA STOP"),
+            I::Keyboard(K::MediaTrackNext) => write!(f, "MEDIA TRACK NEXT"),
+            I::Keyboard(K::MediaTrackPrevious) => write!(f, "MEDIA TRACK PREVIOUS"),
+            I::Keyboard(K::Power) => write!(f, "POWER"),
+            I::Keyboard(K::Sleep) => write!(f, "SLEEP"),
+            I::Keyboard(K::AudioVolumeDown) => write!(f, "AUDIO VOLUME DOWN"),
+            I::Keyboard(K::AudioVolumeMute) => write!(f, "AUDIO VOLUME MUTE"),
+            I::Keyboard(K::AudioVolumeUp) => write!(f, "AUDIO VOLUME UP"),
+            I::Keyboard(K::WakeUp) => write!(f, "WAKE UP"),
+            I::Keyboard(K::Meta) => write!(f, "META"),
+            I::Keyboard(K::Hyper) => write!(f, "HYPR"),
+            I::Keyboard(K::Turbo) => write!(f, "TURBO"),
+            I::Keyboard(K::Abort) => write!(f, "ABORT"),
+            I::Keyboard(K::Resume) => write!(f, "RESUME"),
+            I::Keyboard(K::Suspend) => write!(f, "SUSPEND"),
+            I::Keyboard(K::Again) => write!(f, "AGAIN"),
+            I::Keyboard(K::Copy) => write!(f, "COPY"),
+            I::Keyboard(K::Cut) => write!(f, "CUT"),
+            I::Keyboard(K::Find) => write!(f, "FIND"),
+            I::Keyboard(K::Open) => write!(f, "OPEN"),
+            I::Keyboard(K::Paste) => write!(f, "PASTE"),
+            I::Keyboard(K::Props) => write!(f, "PROPS"),
+            I::Keyboard(K::Select) => write!(f, "SELECT"),
+            I::Keyboard(K::Undo) => write!(f, "UNDO"),
+            I::Keyboard(K::Hiragana) => write!(f, "HIRAGANA"),
+            I::Keyboard(K::Katakana) => write!(f, "KATAKANA"),
+            I::Keyboard(K::F1) => write!(f, "F1"),
+            I::Keyboard(K::F2) => write!(f, "F2"),
+            I::Keyboard(K::F3) => write!(f, "F3"),
+            I::Keyboard(K::F4) => write!(f, "F4"),
+            I::Keyboard(K::F5) => write!(f, "F5"),
+            I::Keyboard(K::F6) => write!(f, "F6"),
+            I::Keyboard(K::F7) => write!(f, "F7"),
+            I::Keyboard(K::F8) => write!(f, "F8"),
+            I::Keyboard(K::F9) => write!(f, "F9"),
+            I::Keyboard(K::F10) => write!(f, "F10"),
+            I::Keyboard(K::F11) => write!(f, "F11"),
+            I::Keyboard(K::F12) => write!(f, "F12"),
+            I::Keyboard(K::F13) => write!(f, "F13"),
+            I::Keyboard(K::F14) => write!(f, "F14"),
+            I::Keyboard(K::F15) => write!(f, "F15"),
+            I::Keyboard(K::F16) => write!(f, "F16"),
+            I::Keyboard(K::F17) => write!(f, "F17"),
+            I::Keyboard(K::F18) => write!(f, "F18"),
+            I::Keyboard(K::F19) => write!(f, "F19"),
+            I::Keyboard(K::F20) => write!(f, "F20"),
+            I::Keyboard(K::F21) => write!(f, "F21"),
+            I::Keyboard(K::F22) => write!(f, "F22"),
+            I::Keyboard(K::F23) => write!(f, "F23"),
+            I::Keyboard(K::F24) => write!(f, "F24"),
+            I::Keyboard(K::F25) => write!(f, "F25"),
+            I::Keyboard(K::F26) => write!(f, "F26"),
+            I::Keyboard(K::F27) => write!(f, "F27"),
+            I::Keyboard(K::F28) => write!(f, "F28"),
+            I::Keyboard(K::F29) => write!(f, "F29"),
+            I::Keyboard(K::F30) => write!(f, "F30"),
+            I::Keyboard(K::F31) => write!(f, "F31"),
+            I::Keyboard(K::F32) => write!(f, "F32"),
+            I::Keyboard(K::F33) => write!(f, "F33"),
+            I::Keyboard(K::F34) => write!(f, "F34"),
+            I::Keyboard(K::F35) => write!(f, "F35"),
+            I::Mouse(M::Left) => write!(f, "LEFT CLICK"),
+            I::Mouse(M::Right) => write!(f, "RIGHT CLICK"),
+            I::Mouse(M::Middle) => write!(f, "MIDDLE CLICK"),
+            I::Mouse(M::Back) => write!(f, "MOUSE BACK"),
+            I::Mouse(M::Forward) => write!(f, "MOUSE FORWARD"),
+            I::Mouse(M::Other(other)) => write!(f, "MOUSE BUTTON {}", other),
+            I::Gamepad(G::South) => write!(f, "GAMEPAD SOUTH"),
+            I::Gamepad(G::East) => write!(f, "GAMEPAD EAST"),
+            I::Gamepad(G::North) => write!(f, "GAMEPAD NORTH"),
+            I::Gamepad(G::West) => write!(f, "GAMEPAD WEST"),
+            I::Gamepad(G::C) => write!(f, "GAMEPAD C"),
+            I::Gamepad(G::Z) => write!(f, "GAMEPAD Z"),
+            I::Gamepad(G::LeftTrigger) => write!(f, "LEFT TRIGGER"),
+            I::Gamepad(G::LeftTrigger2) => write!(f, "LEFT TRIGGER 2"),
+            I::Gamepad(G::RightTrigger) => write!(f, "RIGHT TRIGGER"),
+            I::Gamepad(G::RightTrigger2) => write!(f, "RIGHT TRIGGER 2"),
+            I::Gamepad(G::Select) => write!(f, "SELECT"),
+            I::Gamepad(G::Start) => write!(f, "START"),
+            I::Gamepad(G::Mode) => write!(f, "MODE"),
+            I::Gamepad(G::LeftThumb) => write!(f, "LEFT THUMB"),
+            I::Gamepad(G::RightThumb) => write!(f, "RIGHT THUMB"),
+            I::Gamepad(G::DPadUp) => write!(f, "DPAD UP"),
+            I::Gamepad(G::DPadDown) => write!(f, "DPAD DOWN"),
+            I::Gamepad(G::DPadLeft) => write!(f, "DPAD LEFT"),
+            I::Gamepad(G::DPadRight) => write!(f, "DPAD RIGHT"),
+            I::Gamepad(G::Other(other)) => write!(f, "GAMEPAD BUTTON {}", other),
         }
     }
 }

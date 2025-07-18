@@ -244,7 +244,7 @@ impl Database {
         key: &str,
         value: T,
     ) -> Result<(), DatabaseError> {
-        let query = format!("INSERT INTO {table} VALUES (:key, :value)");
+        let query = format!("INSERT OR REPLACE INTO {table} VALUES (:key, :value)");
         let mut statement = self.connection.prepare(query)?;
         statement.bind((":key", key))?;
         statement.bind((":value", value))?;

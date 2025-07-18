@@ -138,7 +138,7 @@ fn menu_screen_enter(mut menu_state: ResMut<NextState<MenuState>>) {
     menu_state.set(MenuState::Main);
 }
 
-fn escape_out(mut commands: Commands, menu_state: Res<State<MenuState>>, key: Res<InputState>) {
+fn escape_out(mut commands: Commands, menu_state: Res<State<MenuState>>, key: Res<ControlState>) {
     if key.just_pressed(Control::Pause) {
         use MenuState as M;
         match *menu_state.get() {

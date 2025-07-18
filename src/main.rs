@@ -22,9 +22,9 @@ pub mod prelude {
 
     pub use crate::consts::*;
 
-    pub use crate::controls::{Control, Controls, InputState};
+    pub use crate::controls::{Control, ControlState, Controls, Keybind};
     pub use crate::database::{Database, DatabaseError, FromDatabase, ToDatabase};
-    pub use crate::style::Style;
+    pub use crate::style::{Icons, Style};
     pub use crate::util::*;
 }
 

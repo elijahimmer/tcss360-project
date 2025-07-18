@@ -70,7 +70,7 @@ fn camera_setup(mut commands: Commands) {
     ));
 }
 
-fn pause_game(mut commands: Commands, input: Res<InputState>) {
+fn pause_game(mut commands: Commands, input: Res<ControlState>) {
     if input.just_pressed(Control::Pause) {
         commands.set_state(GameState::Menu);
     }
@@ -81,7 +81,7 @@ fn pause_game(mut commands: Commands, input: Res<InputState>) {
 fn camera_movement(
     mut transform: Single<&mut Transform, With<MainCamera>>,
     settings: Res<CameraMovementSettings>,
-    input: Res<InputState>,
+    input: Res<ControlState>,
     time: Res<Time>,
 ) {
     let movement = Vec2::Y * input.pressed(Control::MoveUp) as u8 as f32
@@ -100,7 +100,7 @@ fn camera_movement(
 fn camera_zoom(
     mut projection: Single<&mut Projection, With<MainCamera>>,
     settings: Res<CameraMovementSettings>,
-    input: Res<InputState>,
+    input: Res<ControlState>,
     time: Res<Time>,
 ) {
     let Projection::Orthographic(ref mut projection2d) = **projection else {
