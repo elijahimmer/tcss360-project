@@ -5,6 +5,7 @@ use crate::prelude::*;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
 use bevy::{input::InputSystem, prelude::*};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::iter::IntoIterator;
 
 pub struct ControlsPlugin;
@@ -32,14 +33,151 @@ impl Plugin for ControlsPlugin {
 }
 
 fn setup_controls(mut commands: Commands, #[cfg(feature = "sqlite")] database: Res<Database>) {
-    #[cfg(feature = "sqlite")]
     commands.insert_resource(Controls::from_database(&database));
-    #[cfg(not(feature = "sqlite"))]
-    commands.insert_resource(Controls::default());
 }
 
-pub type ControlState = ButtonInput<Control>;
+#[derive(Clone, Default, Resource, Reflect)]
+#[reflect(Clone, Default, Resource)]
+pub struct ControlState {
+    pressed: HashMap<Control, f32>,
+    just_pressed: HashSet<Control>,
+    just_released: HashSet<Control>,
+}
 
+/// Taken from [`bevy::input::ButtonInput`] so we could replace a hash set with a hash map.
+impl ControlState {
+    /// Registers a press for the given `input`.
+    pub fn press(&mut self, input: Control, value: f32) {
+        // Returns `true` if the `input` wasn't pressed.
+        if self.pressed.insert(input, value).is_some() {
+            self.just_pressed.insert(input);
+        }
+    }
+
+    /// Returns `true` if the `input` has been pressed.
+    pub fn pressed(&self, input: Control) -> bool {
+        self.pressed.contains_key(&input)
+    }
+
+    /// Returns `true` if any item in `inputs` has been pressed.
+    pub fn any_pressed(&self, inputs: impl IntoIterator<Item = Control>) -> bool {
+        inputs.into_iter().any(|it| self.pressed(it))
+    }
+
+    /// Returns `true` if all items in `inputs` have been pressed.
+    pub fn all_pressed(&self, inputs: impl IntoIterator<Item = Control>) -> bool {
+        inputs.into_iter().all(|it| self.pressed(it))
+    }
+
+    /// Registers a release for the given `input`.
+    pub fn release(&mut self, input: Control) {
+        // Returns `true` if the `input` was pressed.
+        if self.pressed.remove(&input).is_some() {
+            self.just_released.insert(input);
+        }
+    }
+
+    /// Registers a release for all currently pressed inputs.
+    pub fn release_all(&mut self) {
+        // Move all items from pressed into just_released
+        self.just_released
+            .extend(self.pressed.drain().map(|(c, _)| c));
+    }
+
+    /// Returns `true` if the `input` has been pressed during the current frame.
+    ///
+    /// Note: This function does not imply information regarding the current state of [`ControlState::pressed`] or [`ControlState::just_released`].
+    pub fn just_pressed(&self, input: Control) -> bool {
+        self.just_pressed.contains(&input)
+    }
+
+    /// Returns `true` if any item in `inputs` has been pressed during the current frame.
+    pub fn any_just_pressed(&self, inputs: impl IntoIterator<Item = Control>) -> bool {
+        inputs.into_iter().any(|it| self.just_pressed(it))
+    }
+
+    /// Clears the `just_pressed` state of the `input` and returns `true` if the `input` has just been pressed.
+    ///
+    /// Future calls to [`ControlState::just_pressed`] for the given input will return false until a new press event occurs.
+    pub fn clear_just_pressed(&mut self, input: Control) -> bool {
+        self.just_pressed.remove(&input)
+    }
+
+    /// Returns `true` if the `input` has been released during the current frame.
+    ///
+    /// Note: This function does not imply information regarding the current state of [`ControlState::pressed`] or [`ControlState::just_pressed`].
+    pub fn just_released(&self, input: Control) -> bool {
+        self.just_released.contains(&input)
+    }
+
+    /// Returns `true` if any item in `inputs` has just been released.
+    pub fn any_just_released(&self, inputs: impl IntoIterator<Item = Control>) -> bool {
+        inputs.into_iter().any(|input| self.just_released(input))
+    }
+
+    /// Returns `true` if all items in `inputs` have just been released.
+    pub fn all_just_released(&self, inputs: impl IntoIterator<Item = Control>) -> bool {
+        inputs.into_iter().all(|input| self.just_released(input))
+    }
+
+    /// Returns `true` if all items in `inputs` have been just pressed.
+    pub fn all_just_pressed(&self, inputs: impl IntoIterator<Item = Control>) -> bool {
+        inputs.into_iter().all(|input| self.just_pressed(input))
+    }
+
+    /// Clears the `just_released` state of the `input` and returns `true` if the `input` has just been released.
+    ///
+    /// Future calls to [`ControlState::just_released`] for the given input will return false until a new release event occurs.
+    pub fn clear_just_released(&mut self, input: Control) -> bool {
+        self.just_released.remove(&input)
+    }
+
+    /// Clears the `pressed`, `just_pressed` and `just_released` data of the `input`.
+    pub fn reset(&mut self, input: Control) {
+        self.pressed.remove(&input);
+        self.just_pressed.remove(&input);
+        self.just_released.remove(&input);
+    }
+
+    /// Clears the `pressed`, `just_pressed`, and `just_released` data for every input.
+    ///
+    /// See also [`ControlState::clear`] for simulating elapsed time steps.
+    pub fn reset_all(&mut self) {
+        self.pressed.clear();
+        self.just_pressed.clear();
+        self.just_released.clear();
+    }
+
+    /// Clears the `just pressed` and `just released` data for every input.
+    ///
+    /// See also [`ControlState::reset_all`] for a full reset.
+    pub fn clear(&mut self) {
+        self.just_pressed.clear();
+        self.just_released.clear();
+    }
+
+    /// An iterator visiting every pressed input in arbitrary order.
+    pub fn get_pressed(&self) -> impl ExactSizeIterator<Item = (&Control, &f32)> {
+        self.pressed.iter()
+    }
+
+    /// An iterator visiting every just pressed input in arbitrary order.
+    ///
+    /// Note: Returned elements do not imply information regarding the current state of [`ControlState::pressed`] or [`ControlState::just_released`].
+    pub fn get_just_pressed(&self) -> impl ExactSizeIterator<Item = &Control> {
+        self.just_pressed.iter()
+    }
+
+    /// An iterator visiting every just released input in arbitrary order.
+    ///
+    /// Note: Returned elements do not imply information regarding the current state of [`ControlState::pressed`] or [`ControlState::just_pressed`].
+    pub fn get_just_released(&self) -> impl ExactSizeIterator<Item = &Control> {
+        self.just_released.iter()
+    }
+}
+
+/// This function isn't ideal, but I don't know if there
+/// is a better way to do it with how we need.
 fn update_input_state(
     mut input_state: ResMut<ButtonInput<Input>>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -91,7 +229,7 @@ fn update_control_state(
         let just_released = input_state.any_just_released(keybind);
 
         if just_pressed {
-            control_state.press(control);
+            control_state.press(control, 1.0);
         }
 
         if just_released && !pressed {
@@ -144,16 +282,28 @@ pub type InputList = [Option<Input>; INPUT_LIST_LEN];
 pub enum Input {
     Keyboard(KeyCode),
     Mouse(MouseButton),
+    MouseWheelAxis(MouseWheelAxis),
     Gamepad(GamepadButton),
+    GamepadAxis(GamepadAxis),
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Reflect, Serialize, Deserialize)]
+#[reflect(Debug, Hash, PartialEq, Clone, Serialize, Deserialize)]
+pub enum MouseWheelAxis {
+    X,
+    Y,
 }
 
 // sometimes, you just have to do this...
 impl std::fmt::Display for Input {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        use GamepadAxis as GA;
         use GamepadButton as G;
         use Input as I;
         use KeyCode as K;
         use MouseButton as M;
+        use MouseWheelAxis as MA;
+
         match self {
             I::Keyboard(K::Unidentified(_)) => write!(f, "Unidentified"),
             I::Keyboard(K::Backquote) => write!(f, "`"),
@@ -358,6 +508,8 @@ impl std::fmt::Display for Input {
             I::Mouse(M::Back) => write!(f, "MOUSE BACK"),
             I::Mouse(M::Forward) => write!(f, "MOUSE FORWARD"),
             I::Mouse(M::Other(other)) => write!(f, "MOUSE BUTTON {}", other),
+            I::MouseWheelAxis(MA::X) => write!(f, "MOUSE WHEEL X AXIS"),
+            I::MouseWheelAxis(MA::Y) => write!(f, "MOUSE WHEEL Y AXIS"),
             I::Gamepad(G::South) => write!(f, "GAMEPAD SOUTH"),
             I::Gamepad(G::East) => write!(f, "GAMEPAD EAST"),
             I::Gamepad(G::North) => write!(f, "GAMEPAD NORTH"),
@@ -377,7 +529,14 @@ impl std::fmt::Display for Input {
             I::Gamepad(G::DPadDown) => write!(f, "DPAD DOWN"),
             I::Gamepad(G::DPadLeft) => write!(f, "DPAD LEFT"),
             I::Gamepad(G::DPadRight) => write!(f, "DPAD RIGHT"),
-            I::Gamepad(G::Other(other)) => write!(f, "GAMEPAD BUTTON {}", other),
+            I::Gamepad(G::Other(other)) => write!(f, "GAMEPAD BUTTON {other}"),
+            I::GamepadAxis(GA::LeftStickX) => write!(f, "GAMEPAD LEFT STICK X"),
+            I::GamepadAxis(GA::LeftStickY) => write!(f, "GAMEPAD LEFT STICK Y"),
+            I::GamepadAxis(GA::LeftZ) => write!(f, "GAMPAD LEFT STICK Z"),
+            I::GamepadAxis(GA::RightStickX) => write!(f, "GAMEPAD RIGHT STICK X"),
+            I::GamepadAxis(GA::RightStickY) => write!(f, "GAMEPAD RIGHT STICK Y"),
+            I::GamepadAxis(GA::RightZ) => write!(f, "GAMEPAD RIGHT STICK Z"),
+            I::GamepadAxis(GA::Other(other)) => write!(f, "GAMEPAD AXIS {other}"),
         }
     }
 }
@@ -643,7 +802,10 @@ const DEFAULT_PAUSE_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::CapsLock)),
 ];
 // TODO: Change this to mouse button left.
-const DEFAULT_SELECT_CONTROLS: InputList = [Some(Input::Keyboard(KeyCode::KeyE)), None];
+const DEFAULT_SELECT_CONTROLS: InputList = [
+    Some(Input::Mouse(MouseButton::Left)),
+    Some(Input::Keyboard(KeyCode::KeyE)),
+];
 
 #[cfg(feature = "sqlite")]
 fn query_keybind_or_set(database: &Database, keybind: &str, default: InputList) -> InputList {
