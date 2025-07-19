@@ -16,6 +16,7 @@ pub mod prelude {
     #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
     pub enum GameState {
         #[default]
+        InitialLoading,
         Menu,
         Game,
     }
@@ -94,8 +95,18 @@ fn main() {
         .add_plugins(CameraPlugin)
         //.insert_resource::<GlobalRandom>(GlobalRandom(rand))
         //.add_systems(Startup, spawn_floors)
-        .add_plugins(NewGamePlugin)
-        .run();
+        .add_plugins(NewGamePlugin);
+    app.add_systems(
+        Update,
+        check_textures.run_if(in_state(GameState::InitialLoading)),
+    )
+    .run();
+}
+
+// Wait for everything to load
+// TODO: Find a better way to wait, because this just transitions immediately.
+fn check_textures(mut next_state: ResMut<NextState<GameState>>) {
+    next_state.set(GameState::Menu);
 }
 
 //const AXIAL_DIRECTIONS: [AxialPos; 7] = [
