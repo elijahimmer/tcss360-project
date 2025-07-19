@@ -1,5 +1,3 @@
-//! TODO: Display keybinds as icons/characters and inputs and lists of them.
-
 use crate::embed_asset;
 use crate::prelude::*;
 use bevy::ecs::hierarchy::ChildSpawnerCommands;
@@ -224,7 +222,7 @@ fn update_control_state(
 
     for Keybind(control, keybind) in controls.clone().into_iter() {
         let keybind = keybind.into_iter().filter_map(|k| k);
-        // TODO: Remove vec because for something like a bounded array.
+
         let pressed = input_state.any_pressed(keybind.clone());
         let just_pressed = input_state.any_just_pressed(keybind.clone());
         let just_released = input_state.any_just_released(keybind);
@@ -543,7 +541,6 @@ impl std::fmt::Display for Input {
 }
 
 /// The list of controls for each input
-/// TODO: Implement controller inputs maybe
 #[derive(Resource, Reflect, Clone, Eq, PartialEq, Debug)]
 #[reflect(Resource, Clone, PartialEq, Debug)]
 pub struct Controls {
@@ -629,7 +626,6 @@ impl Controls {
     }
 
     // TODO: Do this in a single transaction maybe? (don't know if it matters)
-    // TODO: add database backend support so we don't need  stub version here
     fn from_database(db: &Database) -> Self {
         Self {
             move_up: db.get_kv_table_or_default(KEYBINDS_DB_TABLE, "move_up", DEFAULT_UP_CONTROLS),
@@ -668,7 +664,6 @@ impl Controls {
     }
 
     // TODO: Do this in a single transaction maybe? (don't know if it matters)
-    // TODO: add database backend support so we don't need  stub version here
     fn to_database(&self, db: &Database) -> Result<(), crate::database::SetKvError> {
         db.set_kv_table(KEYBINDS_DB_TABLE, "move_up", self.move_up)?;
         db.set_kv_table(KEYBINDS_DB_TABLE, "move_down", self.move_down)?;
@@ -810,7 +805,6 @@ const DEFAULT_PAUSE_CONTROLS: InputList = [
     Some(Input::Keyboard(KeyCode::Escape)),
     Some(Input::Keyboard(KeyCode::CapsLock)),
 ];
-// TODO: Change this to mouse button left.
 const DEFAULT_SELECT_CONTROLS: InputList = [
     Some(Input::Mouse(MouseButton::Left)),
     Some(Input::Keyboard(KeyCode::KeyE)),
