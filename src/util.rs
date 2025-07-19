@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::state::state::FreelyMutableState;
 
 /// TODO: Replace with `std::f32::consts::SQRT_3` when that is stable.
 //pub const SQRT_3: f32 = 1.732050807568877293527446341505872367_f32;
@@ -26,4 +27,27 @@ macro_rules! embed_asset {
             include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/", $path)),
         );
     }};
+}
+
+/// Helper method to despawn all of the entities with a given component.
+/// This is used with the `On*` Components to easily destroy all of the components
+/// on specific screens
+pub fn despawn_all_with<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {
+    for entity in &to_despawn {
+        commands.entity(entity).despawn();
+    }
+}
+
+pub fn remove_resource<T: Resource>(mut commands: Commands) {
+    commands.remove_resource::<T>();
+}
+
+pub fn init_resource<T: Resource + FromWorld>(mut commands: Commands) {
+    commands.init_resource::<T>();
+}
+
+pub fn set_state<T: States + FreelyMutableState + Clone>(
+    state: T,
+) -> impl Fn(ResMut<NextState<T>>) {
+    move |mut next| next.set(state.clone())
 }

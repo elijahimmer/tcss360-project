@@ -4,11 +4,18 @@ use crate::prelude::*;
 use bevy::prelude::*;
 
 const STYLE_DB_TABLE: &str = "Style";
-const DEFAULT_FONT_PATH: &str = "embedded://assets/fonts/Ithaca/Ithaca-LVB75.ttf";
-const DEFAULT_TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
 const BUTTON_SPRITE_IMAGE_PATH: &str = "embedded://assets/sprites/buttons.png";
 const BUTTON_GLYPH_SIZE: UVec2 = UVec2::new(32, 36);
 const BUTTON_GLYPH_TEXT_COLOR: Color = Color::BLACK;
+
+const DEFAULT_FONT_PATH: &str = "embedded://assets/fonts/Ithaca/Ithaca-LVB75.ttf";
+const DEFAULT_TEXT_COLOR: Color = Color::srgb_u8(0xe0, 0xde, 0xf4);
+const DEFAULT_BACKGROUND_COLOR: Color = Color::srgba_u8(0x26, 0x23, 0x3a, 0xaa);
+const DEFAULT_TITLE_COLOR: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
+const DEFAULT_BUTTON_COLOR: Color = Color::srgb_u8(0x26, 0x23, 0x3a);
+const DEFAULT_PRESSED_BUTTON_COLOR: Color = Color::srgb_u8(0x9c, 0xcf, 0xd8);
+const DEFAULT_HOVERED_BUTTON_COLOR: Color = Color::srgb_u8(0x1f, 0x1d, 0x2e);
+const DEFAULT_HOVERED_PRESSED_BUTTON_COLOR: Color = Color::srgb_u8(0x1f, 0x1d, 0x2e);
 
 pub struct StylePlugin;
 
@@ -42,8 +49,13 @@ pub struct Style {
     pub font: Handle<Font>,
     icons: Icons,
 
+    pub background_color: Color,
+    pub title_color: Color,
     pub text_color: Color,
-    //background_color: Color,
+    pub button_color: Color,
+    pub pressed_button_color: Color,
+    pub hovered_button_color: Color,
+    pub hovered_pressed_button_color: Color,
 }
 
 impl Style {
@@ -139,10 +151,40 @@ impl Style {
             font: asset_server.load(font_path),
             icons: Icons::new(asset_server, BUTTON_SPRITE_IMAGE_PATH),
 
+            background_color: db.get_kv_table_or_default(
+                STYLE_DB_TABLE,
+                "background_color",
+                DEFAULT_BACKGROUND_COLOR,
+            ),
+            title_color: db.get_kv_table_or_default(
+                STYLE_DB_TABLE,
+                "title_color",
+                DEFAULT_TITLE_COLOR,
+            ),
             text_color: db.get_kv_table_or_default(
                 STYLE_DB_TABLE,
                 "text_color",
                 DEFAULT_TEXT_COLOR,
+            ),
+            button_color: db.get_kv_table_or_default(
+                STYLE_DB_TABLE,
+                "normal_button",
+                DEFAULT_BUTTON_COLOR,
+            ),
+            pressed_button_color: db.get_kv_table_or_default(
+                STYLE_DB_TABLE,
+                "pressed_button",
+                DEFAULT_PRESSED_BUTTON_COLOR,
+            ),
+            hovered_button_color: db.get_kv_table_or_default(
+                STYLE_DB_TABLE,
+                "hovered_button",
+                DEFAULT_HOVERED_BUTTON_COLOR,
+            ),
+            hovered_pressed_button_color: db.get_kv_table_or_default(
+                STYLE_DB_TABLE,
+                "hovered_pressed_button",
+                DEFAULT_HOVERED_PRESSED_BUTTON_COLOR,
             ),
         }
     }
@@ -160,6 +202,26 @@ impl Style {
 
         db.set_kv_table_direct(STYLE_DB_TABLE, "font", asset_path.as_str())?;
         db.set_kv_table(STYLE_DB_TABLE, "text_color", self.text_color)?;
+        db.set_kv_table(STYLE_DB_TABLE, "text_color", self.text_color)?;
+        db.set_kv_table(STYLE_DB_TABLE, "background_color", self.background_color)?;
+        db.set_kv_table(STYLE_DB_TABLE, "title_color", self.title_color)?;
+        db.set_kv_table(STYLE_DB_TABLE, "text_color", self.text_color)?;
+        db.set_kv_table(STYLE_DB_TABLE, "button_color", self.button_color)?;
+        db.set_kv_table(
+            STYLE_DB_TABLE,
+            "pressed_button_color",
+            self.pressed_button_color,
+        )?;
+        db.set_kv_table(
+            STYLE_DB_TABLE,
+            "hovered_button_color",
+            self.hovered_button_color,
+        )?;
+        db.set_kv_table(
+            STYLE_DB_TABLE,
+            "hovered_pressed_button_color",
+            self.hovered_pressed_button_color,
+        )?;
 
         Ok(())
     }
